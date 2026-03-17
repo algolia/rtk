@@ -11,7 +11,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0  # better cache hit rate with sccache/rust-cache
 
 jobs:
   # ── Cheap pre-checks (no compilation, run in parallel) ──────────────────────
@@ -92,11 +91,16 @@ jobs:
         with:
           components: clippy
 
-      - name: Rust build cache
-        uses: Swatow/rust-cache@v2
+      - name: Cargo cache
+        uses: actions/cache@v4
         with:
-          # Separate caches per OS + Cargo.lock
-          shared-key: ${{ runner.os }}-cargo
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
       # Single compile shared by clippy + test (target/ persists across steps)
       - name: Clippy
