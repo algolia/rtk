@@ -232,7 +232,6 @@ pub fn find_corrections(commands: &[CommandExecution]) -> Vec<CorrectionPair> {
         // Look ahead for correction within CORRECTION_WINDOW
         let window_end = std::cmp::min(i + 1 + CORRECTION_WINDOW, commands.len());
         for candidate in &commands[(i + 1)..window_end] {
-
             let similarity = command_similarity(&cmd.command, &candidate.command);
 
             // Must meet minimum similarity
