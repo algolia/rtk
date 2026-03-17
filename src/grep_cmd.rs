@@ -4,6 +4,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::process::Command;
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     pattern: &str,
     path: &str,

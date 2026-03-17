@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Canonical types for tool outputs
 /// These provide a unified interface across different tool versions
 use serde::{Deserialize, Serialize};

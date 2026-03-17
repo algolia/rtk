@@ -36,11 +36,13 @@ struct PylintDiagnostic {
     module: String,
     #[allow(dead_code)]
     obj: String,
+    #[allow(dead_code)]
     line: usize,
     #[allow(dead_code)]
     column: usize,
     path: String,
     symbol: String, // rule code like "unused-variable"
+    #[allow(dead_code)]
     message: String,
     #[serde(rename = "message-id")]
     message_id: String, // e.g., "W0612"

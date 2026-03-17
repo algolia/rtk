@@ -692,7 +692,7 @@ fn run_commit(messages: &[String], verbose: u8) -> Result<()> {
         // Extract commit hash from output like "[main abc1234] message"
         let compact = if let Some(line) = stdout.lines().next() {
             if let Some(hash_start) = line.find(' ') {
-                let hash = line[1..hash_start].split(' ').last().unwrap_or("");
+                let hash = line[1..hash_start].split(' ').next_back().unwrap_or("");
                 if !hash.is_empty() && hash.len() >= 7 {
                     format!("ok ✓ {}", &hash[..7.min(hash.len())])
                 } else {
