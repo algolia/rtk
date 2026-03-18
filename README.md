@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/algolia/rtk/main/install.sh | sh
 
 **How to verify you have the correct rtk:**
 ```bash
-rtk --version   # Should show "rtk 0.22.3"
+rtk --version   # Should show "rtk 0.22.4"
 rtk gain        # Should show token savings stats
 ```
 

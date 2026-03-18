@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.22.3" (or newer)
+rtk --version  # Should show "rtk 0.22.4" (or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 
@@ -71,7 +71,7 @@ We do **not** merge upstream wholesale. Instead:
 
 ### Version Pinning
 
-- `install.sh` pins to a specific release tag (e.g., `v0.22.3`)
+- `install.sh` pins to a specific release tag (e.g., `v0.22.4`)
 - Pin is updated manually after testing a new upstream sync
 - `Cargo.toml` version reflects our fork's release, not upstream's
 
