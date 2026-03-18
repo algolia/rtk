@@ -5,7 +5,7 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.22.3-algolia.1](https://github.com/algolia/rtk/compare/v0.22.2...v0.22.3-algolia.1) (2026-03-17)
+## [0.22.3](https://github.com/algolia/rtk/compare/v0.22.2...v0.22.3) (2026-03-18)
 
 This is the first release from the `algolia/rtk` fork. All upstream features are welcome;
 telemetry is permanently excluded.
