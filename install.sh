@@ -6,7 +6,7 @@ set -e
 
 REPO="algolia/rtk"
 BINARY_NAME="rtk"
-PINNED_VERSION="v0.22.3"
+PINNED_VERSION="v0.22.4"
 INSTALL_DIR="${RTK_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors
