@@ -6,6 +6,7 @@ use colored::Colorize; // added: terminal colors
 use serde::Serialize;
 use std::io::IsTerminal; // added: TTY detection for graceful degradation
 
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     graph: bool,
     history: bool,
