@@ -21,7 +21,7 @@ pub enum GitCommand {
 
 /// Build a `Command` for git, prepending `-C <dir>` when a directory override is active.
 ///
-/// Every git invocation in this module MUST use `git_cmd()` instead of `git_cmd()`
+/// Every git invocation in this module MUST use `git_cmd()` instead of `Command::new("git")`
 /// so that `-C` is threaded through consistently.
 fn git_cmd() -> Command {
     let mut cmd = Command::new("git");
