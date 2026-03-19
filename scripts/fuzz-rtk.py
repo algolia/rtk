@@ -523,11 +523,14 @@ def run_command(cmd: str, cwd: str, label: str = "") -> RunResult:
     except ValueError as e:
         return RunResult("", "", -1, 0, error=f"shlex parse error: {e}")
 
+    # Skip RTK tracking so fuzzer runs don't pollute `rtk gain` stats
+    env = {**os.environ, "RTK_SKIP_TRACKING": "1"}
+
     start = time.monotonic()
     try:
         result = subprocess.run(
             parts, capture_output=True, text=True,
-            timeout=COMMAND_TIMEOUT, cwd=cwd,
+            timeout=COMMAND_TIMEOUT, cwd=cwd, env=env,
         )
         duration = int((time.monotonic() - start) * 1000)
         return RunResult(
