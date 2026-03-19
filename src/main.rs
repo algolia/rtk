@@ -240,22 +240,22 @@ enum Commands {
         /// Path to search in
         #[arg(default_value = ".")]
         path: String,
-        /// Max line length
-        #[arg(short = 'l', long, default_value = "80")]
+        /// Max line length (no short flag — -l is rg's --files-with-matches)
+        #[arg(long, default_value = "80")]
         max_len: usize,
-        /// Max results to show
-        #[arg(short, long, default_value = "50")]
+        /// Max results to show (no short flag — -m is rg's --max-count)
+        #[arg(long, default_value = "50")]
         max: usize,
-        /// Show only match context (not full line)
-        #[arg(short, long)]
+        /// Show only match context (not full line; no short — -c is rg's --count)
+        #[arg(long)]
         context_only: bool,
-        /// Filter by file type (e.g., ts, py, rust)
+        /// Filter by file type (e.g., ts, py, rust) — matches rg -t
         #[arg(short = 't', long)]
         file_type: Option<String>,
         /// Show line numbers (always on, accepted for grep/rg compatibility)
         #[arg(short = 'n', long)]
         line_numbers: bool,
-        /// Extra ripgrep arguments (e.g., -i, -A 3, -w, --glob)
+        /// Extra ripgrep arguments (e.g., -i, -A 3, -w, -l, -c, --glob)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         extra_args: Vec<String>,
     },

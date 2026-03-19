@@ -24,14 +24,38 @@ pub fn run(
     // Fix: convert BRE alternation \| → | for rg (which uses PCRE-style regex)
     let rg_pattern = pattern.replace(r"\|", "|");
 
-    // Detect count mode (-c/--count) — output format is file:count, not file:line:content.
-    // Skip grouping filter and passthrough raw output (already minimal).
-    let is_count_mode = extra_args.iter().any(|a| a == "-c" || a == "--count");
+    // Detect flags that change rg's output format away from file:linenum:content.
+    // These must bypass RTK's grouping filter and passthrough raw output.
+    let is_passthrough_mode = extra_args.iter().any(|a| {
+        matches!(
+            a.as_str(),
+            "-c" | "--count"
+                | "--count-matches"
+                | "-l"
+                | "--files-with-matches"
+                | "-L"
+                | "--files-without-match"
+                | "--json"
+                | "--vimgrep"
+                | "-h"
+                | "--no-filename"
+        )
+    });
+    // Context flags (-A/-B/-C) add separator lines (--) that break the parser
+    let has_context_flags = extra_args.iter().any(|a| {
+        a == "-A"
+            || a == "-B"
+            || a == "-C"
+            || a.starts_with("-A=")
+            || a.starts_with("-B=")
+            || a.starts_with("-C=")
+    });
+    let is_passthrough_mode = is_passthrough_mode || has_context_flags;
 
     let mut rg_cmd = Command::new("rg");
-    if is_count_mode {
-        // In count mode, -n is meaningless and --no-heading is default; just pass --count
-        rg_cmd.args(["--count", &rg_pattern, path]);
+    if is_passthrough_mode {
+        // Passthrough: let rg handle output format natively
+        rg_cmd.args([&rg_pattern, path]);
     } else {
         rg_cmd.args(["-n", "--no-heading", &rg_pattern, path]);
     }
@@ -43,10 +67,6 @@ pub fn run(
     for arg in extra_args {
         // Fix: skip grep-ism -r flag (rg is recursive by default; rg -r means --replace)
         if arg == "-r" || arg == "--recursive" {
-            continue;
-        }
-        // Skip -c/--count — already handled above via is_count_mode
-        if arg == "-c" || arg == "--count" {
             continue;
         }
         rg_cmd.arg(arg);
@@ -62,14 +82,18 @@ pub fn run(
 
     let raw_output = stdout.to_string();
 
-    // Count mode: passthrough raw output (already minimal, no grouping needed)
-    if is_count_mode {
+    // Passthrough mode: output is already in the format the user requested
+    if is_passthrough_mode {
         if !raw_output.is_empty() {
             print!("{}", raw_output);
         }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            eprint!("{}", stderr);
+        }
         timer.track(
-            &format!("grep -c '{}' {}", pattern, path),
-            "rtk grep -c",
+            &format!("grep '{}' {}", pattern, path),
+            "rtk grep (passthrough)",
             &raw_output,
             &raw_output,
         );
@@ -279,43 +303,81 @@ mod tests {
         assert!(!cleaned.is_empty());
     }
 
-    // Fix: -c/--count flags are detected and handled separately
+    // Format-changing rg flags trigger passthrough mode
     #[test]
-    fn test_count_mode_detected() {
-        let extra_with_c: &[&str] = &["-i", "-c"];
-        assert!(extra_with_c.iter().any(|a| *a == "-c" || *a == "--count"));
-
-        let extra_with_long: &[&str] = &["--count"];
-        assert!(extra_with_long
-            .iter()
-            .any(|a| *a == "-c" || *a == "--count"));
-
-        let extra_without: &[&str] = &["-i", "-w"];
-        assert!(!extra_without.iter().any(|a| *a == "-c" || *a == "--count"));
+    fn test_passthrough_flags_detected() {
+        let passthrough_flags: &[&str] = &[
+            "-c",
+            "--count",
+            "--count-matches",
+            "-l",
+            "--files-with-matches",
+            "-L",
+            "--files-without-match",
+            "--json",
+            "--vimgrep",
+            "-h",
+            "--no-filename",
+        ];
+        for flag in passthrough_flags {
+            let args = [flag.to_string()];
+            assert!(
+                args.iter().any(|a| matches!(
+                    a.as_str(),
+                    "-c" | "--count"
+                        | "--count-matches"
+                        | "-l"
+                        | "--files-with-matches"
+                        | "-L"
+                        | "--files-without-match"
+                        | "--json"
+                        | "--vimgrep"
+                        | "-h"
+                        | "--no-filename"
+                )),
+                "Flag {} should trigger passthrough",
+                flag
+            );
+        }
     }
 
-    // Fix: -c/--count flags are stripped from extra_args passthrough
+    // Context flags (-A/-B/-C) also trigger passthrough
     #[test]
-    fn test_count_flag_stripped_from_extra_args() {
-        let extra_args: &[&str] = &["-r", "-c", "-i", "--count"];
-        let filtered: Vec<&str> = extra_args
-            .iter()
-            .copied()
-            .filter(|a| *a != "-r" && *a != "--recursive" && *a != "-c" && *a != "--count")
-            .collect();
-        assert_eq!(filtered, vec!["-i"]);
+    fn test_context_flags_trigger_passthrough() {
+        for flag in &["-A", "-B", "-C"] {
+            let args = [flag.to_string(), "2".to_string()];
+            assert!(
+                args.iter().any(|a| a == "-A" || a == "-B" || a == "-C"),
+                "Context flag {} should trigger passthrough",
+                flag
+            );
+        }
     }
 
-    // Regression: grep -c output (file:count) must not be parsed as file:linenum:content
+    // Non-passthrough flags should NOT trigger passthrough
     #[test]
-    fn test_count_mode_output_passthrough() {
-        // Simulate rg --count output: file:count format
-        let rg_count_output = "/tmp/output.txt:42\nsrc/main.rs:7\n";
-
-        // In count mode, output should be passed through verbatim — no grouping
-        // Verify the output format is NOT mangled into "📄 42 (1):" nonsense
-        assert!(rg_count_output.contains("/tmp/output.txt:42"));
-        assert!(!rg_count_output.contains("📄"));
+    fn test_normal_flags_no_passthrough() {
+        let normal_flags: &[&str] = &["-i", "-w", "--glob", "-e"];
+        for flag in normal_flags {
+            let args = [flag.to_string()];
+            assert!(
+                !args.iter().any(|a| matches!(
+                    a.as_str(),
+                    "-c" | "--count"
+                        | "--count-matches"
+                        | "-l"
+                        | "--files-with-matches"
+                        | "-L"
+                        | "--files-without-match"
+                        | "--json"
+                        | "--vimgrep"
+                        | "-h"
+                        | "--no-filename"
+                )),
+                "Flag {} should NOT trigger passthrough",
+                flag
+            );
+        }
     }
 
     // Fix: BRE \| alternation is translated to PCRE | for rg
