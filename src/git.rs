@@ -328,18 +328,71 @@ fn run_log(args: &[String], _max_lines: Option<usize>, verbose: u8) -> Result<()
     let mut cmd = git_cmd();
     cmd.arg("log");
 
-    // Check if user provided format flags
-    let has_format_flag = args.iter().any(|arg| {
-        arg.starts_with("--oneline") || arg.starts_with("--pretty") || arg.starts_with("--format")
+    // Check if user provided format flags — if so, they want exact control.
+    // Passthrough: no RTK format injection, no --no-merges, no output filtering.
+    let has_format_flag = args
+        .iter()
+        .any(|arg| arg.starts_with("--pretty") || arg.starts_with("--format"));
+    // --oneline is a format shorthand but produces simple output RTK can still compress
+    let has_oneline = args.iter().any(|arg| arg == "--oneline");
+
+    // --graph, --stat, --numstat, --shortstat, --patch, --raw, --name-only, --name-status
+    // all produce output that RTK's compact filter would mangle
+    let has_detail_flag = args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "--graph"
+                | "--stat"
+                | "--numstat"
+                | "--shortstat"
+                | "--patch"
+                | "-p"
+                | "--raw"
+                | "--name-only"
+                | "--name-status"
+        )
     });
+
+    // When user specifies format or detail flags, passthrough to git directly
+    if has_format_flag || has_detail_flag {
+        for arg in args {
+            cmd.arg(arg);
+        }
+
+        let output = cmd.output().context("Failed to run git log")?;
+        let exit_code = output.status.code().unwrap_or(1);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if !stderr.is_empty() {
+            eprint!("{}", stderr);
+        }
+        if !stdout.is_empty() {
+            print!("{}", stdout);
+        }
+
+        timer.track(
+            &format!("git log {}", args.join(" ")),
+            "rtk git log (passthrough)",
+            &stdout,
+            &stdout,
+        );
+
+        if exit_code != 0 {
+            std::process::exit(exit_code);
+        }
+        return Ok(());
+    }
+
+    // --- Default RTK compact mode (no user format flags) ---
 
     // Check if user provided limit flag
     let has_limit_flag = args
         .iter()
         .any(|arg| arg.starts_with('-') && arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit()));
 
-    // Apply RTK defaults only if user didn't specify them
-    if !has_format_flag {
+    // Apply RTK defaults
+    if !has_oneline {
         cmd.args(["--pretty=format:%h %s (%ar) <%an>"]);
     }
 
@@ -347,7 +400,6 @@ fn run_log(args: &[String], _max_lines: Option<usize>, verbose: u8) -> Result<()
         cmd.arg("-10");
         10
     } else {
-        // Extract limit from args if provided
         args.iter()
             .find(|arg| {
                 arg.starts_with('-') && arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
@@ -364,7 +416,6 @@ fn run_log(args: &[String], _max_lines: Option<usize>, verbose: u8) -> Result<()
         cmd.arg("--no-merges");
     }
 
-    // Pass all user arguments
     for arg in args {
         cmd.arg(arg);
     }
@@ -374,7 +425,6 @@ fn run_log(args: &[String], _max_lines: Option<usize>, verbose: u8) -> Result<()
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("{}", stderr);
-        // Propagate git's exit code
         std::process::exit(output.status.code().unwrap_or(1));
     }
 
@@ -384,7 +434,6 @@ fn run_log(args: &[String], _max_lines: Option<usize>, verbose: u8) -> Result<()
         eprintln!("Git log output:");
     }
 
-    // Post-process: truncate long messages, cap lines
     let filtered = filter_log_output(&stdout, limit);
     println!("{}", filtered);
 
