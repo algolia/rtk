@@ -153,7 +153,7 @@ fn run_diff(args: &[String], max_lines: Option<usize>, verbose: u8) -> Result<()
 fn run_show(args: &[String], max_lines: Option<usize>, verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
-    // If user wants --stat or --format only, pass through
+    // If user wants specific output format, pass through verbatim
     let wants_stat_only = args
         .iter()
         .any(|arg| arg == "--stat" || arg == "--numstat" || arg == "--shortstat");
@@ -162,7 +162,14 @@ fn run_show(args: &[String], max_lines: Option<usize>, verbose: u8) -> Result<()
         .iter()
         .any(|arg| arg.starts_with("--pretty") || arg.starts_with("--format"));
 
-    if wants_stat_only || wants_format {
+    let wants_detail = args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "--name-only" | "--name-status" | "--raw" | "--no-patch" | "--patch" | "-p"
+        )
+    });
+
+    if wants_stat_only || wants_format || wants_detail {
         let mut cmd = git_cmd();
         cmd.arg("show");
         for arg in args {
@@ -1017,6 +1024,37 @@ fn run_branch(args: &[String], verbose: u8) -> Result<()> {
                 eprintln!("{}", stdout);
             }
             std::process::exit(output.status.code().unwrap_or(1));
+        }
+        return Ok(());
+    }
+
+    // Detect flags that change output format — must passthrough verbatim
+    let has_format_flag = args
+        .iter()
+        .any(|a| a.starts_with("--format") || a.starts_with("--sort"));
+
+    if has_format_flag {
+        let mut cmd = git_cmd();
+        cmd.arg("branch");
+        for arg in args {
+            cmd.arg(arg);
+        }
+        let output = cmd.output().context("Failed to run git branch")?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stdout.is_empty() {
+            print!("{}", stdout);
+        }
+        if !stderr.trim().is_empty() {
+            eprint!("{}", stderr);
+        }
+        timer.track_passthrough(
+            &format!("git branch {}", args.join(" ")),
+            &format!("rtk git branch {}", args.join(" ")),
+        );
+        let code = output.status.code().unwrap_or(1);
+        if code != 0 {
+            std::process::exit(code);
         }
         return Ok(());
     }

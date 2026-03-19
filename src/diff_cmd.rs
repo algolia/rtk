@@ -30,7 +30,7 @@ pub fn run(file1: &Path, file2: &Path, verbose: u8) -> Result<()> {
             &raw,
             &rtk,
         );
-        return Ok(());
+        return Ok(()); // exit 0: files identical
     }
 
     rtk.push_str(&format!("📊 {} → {}\n", file1.display(), file2.display()));
@@ -62,7 +62,9 @@ pub fn run(file1: &Path, file2: &Path, verbose: u8) -> Result<()> {
         &raw,
         &rtk,
     );
-    Ok(())
+
+    // Match diff convention: exit 1 when files differ
+    std::process::exit(1);
 }
 
 /// Run diff from stdin (piped command output)

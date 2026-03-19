@@ -38,6 +38,11 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         .iter()
         .any(|a| (a.starts_with('-') && !a.starts_with("--") && a.contains('a')) || a == "--all");
 
+    // Detect if user explicitly requested long format — passthrough verbatim
+    let has_long_flag = args
+        .iter()
+        .any(|a| (a.starts_with('-') && !a.starts_with("--") && a.contains('l')) || a == "--long");
+
     let flags: Vec<&str> = args
         .iter()
         .filter(|a| a.starts_with('-'))
@@ -89,6 +94,17 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     }
 
     let raw = String::from_utf8_lossy(&output.stdout).to_string();
+
+    // User explicitly requested -l: passthrough raw ls output
+    if has_long_flag {
+        print!("{}", raw);
+        timer.track_passthrough(
+            &format!("ls {}", args.join(" ")),
+            &format!("rtk ls {}", args.join(" ")),
+        );
+        return Ok(());
+    }
+
     let filtered = compact_ls(&raw, show_all);
 
     if verbose > 0 {
