@@ -66,15 +66,20 @@ pub fn run(
 fn run_diff(args: &[String], max_lines: Option<usize>, verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
-    // Check if user wants stat output
+    // Check if user wants stat output or a format-changing flag
     let wants_stat = args
         .iter()
         .any(|arg| arg == "--stat" || arg == "--numstat" || arg == "--shortstat");
 
+    // Flags that produce non-standard diff output — passthrough verbatim
+    let wants_name_only = args
+        .iter()
+        .any(|arg| arg == "--name-only" || arg == "--name-status");
+
     // Check if user wants compact diff (default RTK behavior)
     let wants_compact = !args.iter().any(|arg| arg == "--no-compact");
 
-    if wants_stat || !wants_compact {
+    if wants_stat || wants_name_only || !wants_compact {
         // User wants stat or explicitly no compacting - pass through directly
         let mut cmd = git_cmd();
         cmd.arg("diff");

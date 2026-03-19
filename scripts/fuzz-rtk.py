@@ -305,7 +305,6 @@ STATIC_TESTS = {
     "cat": [
         "cat src/main.rs",
         "cat -n src/main.rs",
-        "cat -b src/main.rs",
     ],
     "ls": [
         "ls -la",

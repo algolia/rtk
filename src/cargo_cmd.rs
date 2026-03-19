@@ -78,7 +78,60 @@ where
     Ok(())
 }
 
+/// Passthrough: run cargo subcommand and print raw output without filtering.
+fn run_cargo_passthrough(subcommand: &str, args: &[String], verbose: u8) -> Result<()> {
+    let timer = tracking::TimedExecution::start();
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg(subcommand);
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    if verbose > 0 {
+        eprintln!(
+            "Running (passthrough): cargo {} {}",
+            subcommand,
+            args.join(" ")
+        );
+    }
+
+    let output = cmd
+        .output()
+        .with_context(|| format!("Failed to run cargo {}", subcommand))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !stdout.is_empty() {
+        print!("{}", stdout);
+    }
+    if !stderr.trim().is_empty() {
+        eprint!("{}", stderr);
+    }
+
+    timer.track_passthrough(
+        &format!("cargo {} {}", subcommand, args.join(" ")),
+        &format!("rtk cargo {} {}", subcommand, args.join(" ")),
+    );
+
+    let exit_code = output.status.code().unwrap_or(1);
+    if !output.status.success() {
+        std::process::exit(exit_code);
+    }
+
+    Ok(())
+}
+
+/// Detect --message-format flag that changes cargo output to JSON/short —
+/// must passthrough raw output to avoid breaking machine-readable consumers.
+fn has_message_format_flag(args: &[String]) -> bool {
+    args.iter().any(|a| a.starts_with("--message-format"))
+}
+
 fn run_build(args: &[String], verbose: u8) -> Result<()> {
+    if has_message_format_flag(args) {
+        return run_cargo_passthrough("build", args, verbose);
+    }
     run_cargo_filtered("build", args, verbose, filter_cargo_build)
 }
 
@@ -87,10 +140,16 @@ fn run_test(args: &[String], verbose: u8) -> Result<()> {
 }
 
 fn run_clippy(args: &[String], verbose: u8) -> Result<()> {
+    if has_message_format_flag(args) {
+        return run_cargo_passthrough("clippy", args, verbose);
+    }
     run_cargo_filtered("clippy", args, verbose, filter_cargo_clippy)
 }
 
 fn run_check(args: &[String], verbose: u8) -> Result<()> {
+    if has_message_format_flag(args) {
+        return run_cargo_passthrough("check", args, verbose);
+    }
     run_cargo_filtered("check", args, verbose, filter_cargo_build)
 }
 

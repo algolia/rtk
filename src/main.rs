@@ -234,7 +234,11 @@ enum Commands {
     },
 
     /// Compact grep - strips whitespace, truncates, groups by file
+    #[command(disable_help_flag = true)]
     Grep {
+        /// Print help (use --help; -h is reserved for rg's --no-filename)
+        #[arg(long, action = clap::ArgAction::Help)]
+        help: Option<bool>,
         /// Pattern to search
         pattern: String,
         /// Path to search in
@@ -1103,6 +1107,7 @@ fn main() -> Result<()> {
             file_type,
             line_numbers: _, // no-op: line numbers always enabled in grep_cmd::run
             extra_args,
+            help: _,
         } => {
             grep_cmd::run(
                 &pattern,
