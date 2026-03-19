@@ -250,11 +250,34 @@ STATIC_TESTS = {
         "git log --graph --oneline -10",
         "git log --numstat -5",
         "git log --name-only -5",
+        "git log --patch -1",
+        "git log --shortstat -5",
+        "git log --pretty=format:'%h %an %s' -5",
     ],
     "git-status": [
         "git status --porcelain",
         "git status --porcelain=v2",
         "git status -s",
+        "git status --short --branch",
+    ],
+    "git-diff": [
+        "git diff --stat HEAD~1",
+        "git diff --name-only HEAD~1",
+        "git diff --name-status HEAD~1",
+        "git diff --numstat HEAD~1",
+        "git diff --shortstat HEAD~1",
+    ],
+    "git-show": [
+        "git show --stat HEAD",
+        "git show --format='%H %s' --no-patch HEAD",
+        "git show --name-only HEAD",
+        "git show --raw HEAD",
+    ],
+    "git-branch": [
+        "git branch -a",
+        "git branch -v",
+        "git branch --format='%(refname:short) %(objectname:short)'",
+        "git branch --sort=-committerdate",
     ],
     "grep": [
         "rg 'fn ' . -c",
@@ -263,25 +286,61 @@ STATIC_TESTS = {
         "rg 'fn ' . -A 2",
         "rg 'fn ' . --json",
         "rg 'fn ' . -h",
+        "rg 'fn ' . -i --count",
+        "rg 'fn ' . -B 1",
+        "rg 'fn ' . --files-without-match",
     ],
     "gh-pr": [
         "gh pr list --json number,title,state",
+        "gh pr list --json number,title --jq '.[0]'",
+    ],
+    "cargo-build": [
+        "cargo build --message-format=short",
+        "cargo check --message-format=json",
+    ],
+    "cargo-clippy": [
+        "cargo clippy --message-format=short",
+        "cargo clippy -q",
     ],
     "cat": [
         "cat src/main.rs",
         "cat -n src/main.rs",
+        "cat -b src/main.rs",
     ],
     "ls": [
         "ls -la",
         "ls -1",
         "ls -lhS src/",
+        "ls -R src/",
+        "ls -la --color=never",
+    ],
+    "find": [
+        "find . -maxdepth 2 -name '*.rs'",
+        "find . -maxdepth 2 -type d",
+        "find . -maxdepth 2 -name '*.toml'",
     ],
     "tree": [
         "tree -L 2",
         "tree -d -L 3",
+        "tree -L 1 --charset=ascii",
+        "tree -L 2 -f",
     ],
     "wc": [
         "wc -l src/main.rs",
+        "wc -w src/main.rs",
+        "wc -c src/main.rs",
+        "wc -l src/git.rs src/grep_cmd.rs",
+    ],
+    "diff": [
+        "diff src/main.rs Cargo.toml",
+        "diff -u src/main.rs Cargo.toml",
+        "diff -q src/main.rs Cargo.toml",
+    ],
+    "env": [
+        "env",
+    ],
+    "curl": [
+        "curl -sI --max-time 5 https://httpbin.org/get",
     ],
 }
 
