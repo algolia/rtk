@@ -729,6 +729,10 @@ def _check_format_preservation(raw: str, rtk: str, cmd: str) -> Optional[Issue]:
     if not has_machine_flag:
         return None
 
+    # wc intentionally strips filenames for compression — not a format bug
+    if cmd_lower.startswith("wc "):
+        return None
+
     raw_s = raw.strip()
     rtk_s = rtk.strip()
     if not raw_s or not rtk_s:
@@ -737,7 +741,22 @@ def _check_format_preservation(raw: str, rtk: str, cmd: str) -> Optional[Issue]:
     if raw_s == rtk_s:
         return None
 
-    ratio = SequenceMatcher(None, raw_s[:2000], rtk_s[:2000]).ratio()
+    # For grep/rg with -c/--count/--json/--vimgrep: rg uses threads so line
+    # order is non-deterministic. Sort lines before comparing to avoid false
+    # positives when data is identical but order differs.
+    cmd_base = cmd.split()[0] if cmd.split() else ""
+    is_grep = cmd_base in ("rg", "grep", "rtk") and any(
+        w in cmd_lower for w in ("grep", "rg ")
+    ) or cmd_base in ("rg", "grep")
+    if is_grep:
+        raw_sorted = "\n".join(sorted(raw_s.splitlines()))
+        rtk_sorted = "\n".join(sorted(rtk_s.splitlines()))
+        if raw_sorted == rtk_sorted:
+            return None
+        ratio = SequenceMatcher(None, raw_sorted[:2000], rtk_sorted[:2000]).ratio()
+    else:
+        ratio = SequenceMatcher(None, raw_s[:2000], rtk_s[:2000]).ratio()
+
     if ratio < 0.90:
         return Issue("FORMAT_ALTERED", f"Machine-readable output altered (similarity: {ratio:.0%})")
     return None
