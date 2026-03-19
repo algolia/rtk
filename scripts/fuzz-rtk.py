@@ -143,6 +143,146 @@ COMMAND_FAMILIES = {
         "focus_flags": ["-l", "-1", "-a", "-R", "-S", "-t", "-h", "--color=never"],
         "context": "any directory",
     },
+    "find": {
+        "rtk_cmd": "rtk find",
+        "raw_cmd": "find . -maxdepth 3",
+        "focus_flags": [
+            "-name", "-type", "-iname", "-path",
+            "-printf", "-print0", "-ls",
+        ],
+        "context": "project directory with source files",
+        "note": "RTK find uses its own glob-based finder. Compare with system find. Keep -maxdepth 3 for speed.",
+    },
+    "cat": {
+        "rtk_cmd": "rtk read",
+        "raw_cmd": "cat",
+        "focus_flags": ["-n", "-b", "-s", "-v", "-e", "-t"],
+        "context": "source code files in a project",
+        "note": "RTK 'read' replaces cat. Generate commands like 'cat src/main.rs' (raw) vs 'rtk read src/main.rs'. Use real filenames from a Rust project (src/main.rs, Cargo.toml, README.md).",
+    },
+    "tree": {
+        "rtk_cmd": "rtk tree",
+        "raw_cmd": "tree",
+        "focus_flags": [
+            "-L", "-d", "-f", "-i", "-p", "-s", "--charset=ascii",
+            "-I", "--prune", "-a", "--dirsfirst",
+        ],
+        "context": "project directory",
+        "note": "Always use -L 2 or -L 3 to limit depth.",
+    },
+    "cargo-test": {
+        "rtk_cmd": "rtk cargo test",
+        "raw_cmd": "cargo test",
+        "focus_flags": [
+            "--message-format=json", "--message-format=short",
+            "-q", "--quiet", "--no-fail-fast", "-- --nocapture",
+        ],
+        "context": "Rust project with tests",
+        "note": "Tests may take a few seconds. Use --no-run to skip execution if needed.",
+    },
+    "cargo-clippy": {
+        "rtk_cmd": "rtk cargo clippy",
+        "raw_cmd": "cargo clippy",
+        "focus_flags": [
+            "--message-format=json", "--message-format=short",
+            "-q", "--quiet", "--all-targets",
+        ],
+        "context": "Rust project",
+    },
+    "git-branch": {
+        "rtk_cmd": "rtk git branch",
+        "raw_cmd": "git branch",
+        "focus_flags": [
+            "-a", "--all", "-r", "--remotes", "-v", "--verbose",
+            "--sort=-committerdate", "--format", "--list",
+        ],
+        "context": "git repository with branches",
+    },
+    "git-stash": {
+        "rtk_cmd": "rtk git stash",
+        "raw_cmd": "git stash",
+        "focus_flags": ["list", "show", "show -p"],
+        "context": "git repository (may have no stashes, that's ok)",
+        "note": "Only use 'list' and 'show' subcommands. NEVER 'drop', 'pop', 'apply', 'push'.",
+    },
+    "curl": {
+        "rtk_cmd": "rtk curl",
+        "raw_cmd": "curl",
+        "focus_flags": [
+            "-s", "-v", "-I", "--head", "-o /dev/null", "-w",
+            "--write-out", "-L", "--max-time 5",
+        ],
+        "context": "network access available",
+        "note": "Use https://httpbin.org/ endpoints. Always include --max-time 5. Only GET requests.",
+    },
+    "wc": {
+        "rtk_cmd": "rtk wc",
+        "raw_cmd": "wc",
+        "focus_flags": ["-l", "-w", "-c", "-m", "-L"],
+        "context": "source files in project",
+        "note": "Generate 'wc -l src/*.rs' style commands.",
+    },
+    "env": {
+        "rtk_cmd": "rtk env",
+        "raw_cmd": "env",
+        "focus_flags": [],
+        "context": "shell environment",
+        "note": "Just compare 'env' vs 'rtk env'. RTK filters sensitive vars.",
+    },
+    "diff": {
+        "rtk_cmd": "rtk diff",
+        "raw_cmd": "diff",
+        "focus_flags": [
+            "-u", "--unified", "-y", "--side-by-side",
+            "-q", "--brief", "--color=never",
+        ],
+        "context": "two files that exist in the project",
+        "note": "Compare two real files e.g. 'diff src/main.rs Cargo.toml'. Files should exist.",
+    },
+}
+
+# Static regression test cases — always run, no LLM needed
+STATIC_TESTS = {
+    "git-log": [
+        "git log --format='%H' -5",
+        "git log --pretty=raw -3",
+        "git log --stat -5",
+        "git log --graph --oneline -10",
+        "git log --numstat -5",
+        "git log --name-only -5",
+    ],
+    "git-status": [
+        "git status --porcelain",
+        "git status --porcelain=v2",
+        "git status -s",
+    ],
+    "grep": [
+        "rg 'fn ' . -c",
+        "rg 'fn ' . -l",
+        "rg 'fn ' . --vimgrep",
+        "rg 'fn ' . -A 2",
+        "rg 'fn ' . --json",
+        "rg 'fn ' . -h",
+    ],
+    "gh-pr": [
+        "gh pr list --json number,title,state",
+    ],
+    "cat": [
+        "cat src/main.rs",
+        "cat -n src/main.rs",
+    ],
+    "ls": [
+        "ls -la",
+        "ls -1",
+        "ls -lhS src/",
+    ],
+    "tree": [
+        "tree -L 2",
+        "tree -d -L 3",
+    ],
+    "wc": [
+        "wc -l src/main.rs",
+    ],
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -653,6 +793,24 @@ def run_fuzz_session(
         families_tested=families,
     )
 
+    # Phase 1: Run static regression tests (no LLM needed)
+    for family_name in families:
+        static_cmds = STATIC_TESTS.get(family_name, [])
+        if not static_cmds:
+            continue
+        family = COMMAND_FAMILIES[family_name]
+        print(
+            f"\n{'='*60}\n"
+            f"Static tests | Family: {family_name} ({len(static_cmds)} tests)\n"
+            f"{'='*60}",
+            file=sys.stderr,
+        )
+        for cmd in static_cmds:
+            report.results.extend(
+                _run_single_test(cmd, family_name, family, dry_run, test_repo)
+            )
+
+    # Phase 2: LLM-generated fuzz tests
     for round_num in range(1, rounds + 1):
         for family_name in families:
             family = COMMAND_FAMILIES[family_name]
@@ -663,7 +821,6 @@ def run_fuzz_session(
                 file=sys.stderr,
             )
 
-            # Generate commands via LLM
             print(f"  Generating {per_round} test cases via {API_MODEL}...", file=sys.stderr)
             commands = generate_test_cases(token, family_name, family, per_round)
             print(f"  Got {len(commands)} commands", file=sys.stderr)
@@ -679,67 +836,70 @@ def run_fuzz_session(
                 continue
 
             for cmd in commands:
-                # Safety check
-                safe, reason = is_safe_command(cmd)
-                if not safe:
-                    print(f"  SKIP (unsafe): {cmd} — {reason}", file=sys.stderr)
-                    report.results.append(TestResult(
-                        command=cmd, family=family_name,
-                        raw=None, rtk=None,
-                        verdict="SKIP", skipped_reason=reason,
-                    ))
-                    continue
-
-                rtk_cmd = cmd_to_rtk(cmd, family)
-                print(f"\n  RAW: {cmd}", file=sys.stderr)
-                print(f"  RTK: {rtk_cmd}", file=sys.stderr)
-
-                if dry_run:
-                    report.results.append(TestResult(
-                        command=cmd, family=family_name,
-                        raw=None, rtk=None,
-                        verdict="SKIP", skipped_reason="dry-run",
-                    ))
-                    continue
-
-                # Execute both
-                raw_result = run_command(cmd, cwd=test_repo, label="raw")
-                rtk_result = run_command(rtk_cmd, cwd=test_repo, label="rtk")
-
-                # Compare
-                issues = compare_outputs(raw_result, rtk_result, cmd)
-                verdict = determine_verdict(issues)
-
-                # Truncate outputs for report
-                raw_for_report = RunResult(
-                    stdout=raw_result.stdout[:1000],
-                    stderr=raw_result.stderr[:500],
-                    exit_code=raw_result.exit_code,
-                    duration_ms=raw_result.duration_ms,
-                    error=raw_result.error,
+                report.results.extend(
+                    _run_single_test(cmd, family_name, family, dry_run, test_repo)
                 )
-                rtk_for_report = RunResult(
-                    stdout=rtk_result.stdout[:1000],
-                    stderr=rtk_result.stderr[:500],
-                    exit_code=rtk_result.exit_code,
-                    duration_ms=rtk_result.duration_ms,
-                    error=rtk_result.error,
-                )
-
-                result = TestResult(
-                    command=cmd, family=family_name,
-                    raw=raw_for_report, rtk=rtk_for_report,
-                    verdict=verdict, issues=issues,
-                )
-                report.results.append(result)
-
-                # Print inline verdict
-                icon = {"PASS": ".", "WARN": "W", "FAIL": "F", "ERROR": "E"}
-                status = icon.get(verdict, "?")
-                detail = f" — {issues[0].code}: {issues[0].detail}" if issues else ""
-                print(f"  [{status}] {verdict}{detail}", file=sys.stderr)
 
     return report
+
+
+def _run_single_test(
+    cmd: str, family_name: str, family: dict, dry_run: bool, test_repo: str,
+) -> list[TestResult]:
+    """Run a single raw-vs-rtk comparison. Returns list of 1 TestResult."""
+    safe, reason = is_safe_command(cmd)
+    if not safe:
+        print(f"  SKIP (unsafe): {cmd} — {reason}", file=sys.stderr)
+        return [TestResult(
+            command=cmd, family=family_name,
+            raw=None, rtk=None,
+            verdict="SKIP", skipped_reason=reason,
+        )]
+
+    rtk_cmd = cmd_to_rtk(cmd, family)
+    print(f"\n  RAW: {cmd}", file=sys.stderr)
+    print(f"  RTK: {rtk_cmd}", file=sys.stderr)
+
+    if dry_run:
+        return [TestResult(
+            command=cmd, family=family_name,
+            raw=None, rtk=None,
+            verdict="SKIP", skipped_reason="dry-run",
+        )]
+
+    raw_result = run_command(cmd, cwd=test_repo, label="raw")
+    rtk_result = run_command(rtk_cmd, cwd=test_repo, label="rtk")
+
+    issues = compare_outputs(raw_result, rtk_result, cmd)
+    verdict = determine_verdict(issues)
+
+    raw_for_report = RunResult(
+        stdout=raw_result.stdout[:1000],
+        stderr=raw_result.stderr[:500],
+        exit_code=raw_result.exit_code,
+        duration_ms=raw_result.duration_ms,
+        error=raw_result.error,
+    )
+    rtk_for_report = RunResult(
+        stdout=rtk_result.stdout[:1000],
+        stderr=rtk_result.stderr[:500],
+        exit_code=rtk_result.exit_code,
+        duration_ms=rtk_result.duration_ms,
+        error=rtk_result.error,
+    )
+
+    result = TestResult(
+        command=cmd, family=family_name,
+        raw=raw_for_report, rtk=rtk_for_report,
+        verdict=verdict, issues=issues,
+    )
+
+    icon = {"PASS": ".", "WARN": "W", "FAIL": "F", "ERROR": "E"}
+    status = icon.get(verdict, "?")
+    detail = f" — {issues[0].code}: {issues[0].detail}" if issues else ""
+    print(f"  [{status}] {verdict}{detail}", file=sys.stderr)
+
+    return [result]
 
 
 # ──────────────────────────────────────────────────────────────────────
