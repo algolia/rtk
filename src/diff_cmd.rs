@@ -1,6 +1,6 @@
 use crate::tracking;
 use crate::utils::truncate;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 
@@ -65,6 +65,56 @@ pub fn run(file1: &Path, file2: &Path, verbose: u8) -> Result<()> {
 
     // Match diff convention: exit 1 when files differ
     std::process::exit(1);
+}
+
+/// Run diff -q (brief mode): passthrough to system diff
+pub fn run_brief(file1: &Path, file2: Option<&Path>, verbose: u8) -> Result<()> {
+    let timer = tracking::TimedExecution::start();
+
+    let mut cmd = std::process::Command::new("diff");
+    cmd.arg("-q");
+    cmd.arg(file1);
+    if let Some(f2) = file2 {
+        cmd.arg(f2);
+    }
+
+    if verbose > 0 {
+        eprintln!(
+            "Running: diff -q {} {}",
+            file1.display(),
+            file2.map(|f| f.display().to_string()).unwrap_or_default()
+        );
+    }
+
+    let output = cmd.output().context("Failed to run diff -q")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !stdout.is_empty() {
+        print!("{}", stdout);
+    }
+    if !stderr.trim().is_empty() {
+        eprint!("{}", stderr);
+    }
+
+    timer.track_passthrough(
+        &format!(
+            "diff -q {} {}",
+            file1.display(),
+            file2.map(|f| f.display().to_string()).unwrap_or_default()
+        ),
+        &format!(
+            "rtk diff -q {} {}",
+            file1.display(),
+            file2.map(|f| f.display().to_string()).unwrap_or_default()
+        ),
+    );
+
+    let exit_code = output.status.code().unwrap_or(1);
+    if !output.status.success() {
+        std::process::exit(exit_code);
+    }
+    Ok(())
 }
 
 /// Run diff from stdin (piped command output)

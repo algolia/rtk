@@ -206,6 +206,9 @@ enum Commands {
         file1: PathBuf,
         /// Second file (optional if stdin)
         file2: Option<PathBuf>,
+        /// Brief mode: just report whether files differ (passthrough to diff -q)
+        #[arg(short = 'q', long)]
+        brief: bool,
     },
 
     /// Filter and deduplicate log output
@@ -1014,8 +1017,14 @@ fn main() -> Result<()> {
             find_cmd::run(&pattern, &path, max, &file_type, cli.verbose)?;
         }
 
-        Commands::Diff { file1, file2 } => {
-            if let Some(f2) = file2 {
+        Commands::Diff {
+            file1,
+            file2,
+            brief,
+        } => {
+            if brief {
+                diff_cmd::run_brief(&file1, file2.as_deref(), cli.verbose)?;
+            } else if let Some(f2) = file2 {
                 diff_cmd::run(&file1, &f2, cli.verbose)?;
             } else {
                 diff_cmd::run_stdin(cli.verbose)?;
