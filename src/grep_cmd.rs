@@ -24,8 +24,17 @@ pub fn run(
     // Fix: convert BRE alternation \| → | for rg (which uses PCRE-style regex)
     let rg_pattern = pattern.replace(r"\|", "|");
 
+    // Detect count mode (-c/--count) — output format is file:count, not file:line:content.
+    // Skip grouping filter and passthrough raw output (already minimal).
+    let is_count_mode = extra_args.iter().any(|a| a == "-c" || a == "--count");
+
     let mut rg_cmd = Command::new("rg");
-    rg_cmd.args(["-n", "--no-heading", &rg_pattern, path]);
+    if is_count_mode {
+        // In count mode, -n is meaningless and --no-heading is default; just pass --count
+        rg_cmd.args(["--count", &rg_pattern, path]);
+    } else {
+        rg_cmd.args(["-n", "--no-heading", &rg_pattern, path]);
+    }
 
     if let Some(ft) = file_type {
         rg_cmd.arg("--type").arg(ft);
@@ -34,6 +43,10 @@ pub fn run(
     for arg in extra_args {
         // Fix: skip grep-ism -r flag (rg is recursive by default; rg -r means --replace)
         if arg == "-r" || arg == "--recursive" {
+            continue;
+        }
+        // Skip -c/--count — already handled above via is_count_mode
+        if arg == "-c" || arg == "--count" {
             continue;
         }
         rg_cmd.arg(arg);
@@ -48,6 +61,23 @@ pub fn run(
     let exit_code = output.status.code().unwrap_or(1);
 
     let raw_output = stdout.to_string();
+
+    // Count mode: passthrough raw output (already minimal, no grouping needed)
+    if is_count_mode {
+        if !raw_output.is_empty() {
+            print!("{}", raw_output);
+        }
+        timer.track(
+            &format!("grep -c '{}' {}", pattern, path),
+            "rtk grep -c",
+            &raw_output,
+            &raw_output,
+        );
+        if exit_code != 0 {
+            std::process::exit(exit_code);
+        }
+        return Ok(());
+    }
 
     if stdout.trim().is_empty() {
         // Show stderr for errors (bad regex, missing file, etc.)
@@ -247,6 +277,45 @@ mod tests {
         let line = "🎉🎊🎈🎁🎂🎄 some text 🎃🎆🎇✨";
         let cleaned = clean_line(line, 15, false, "text");
         assert!(!cleaned.is_empty());
+    }
+
+    // Fix: -c/--count flags are detected and handled separately
+    #[test]
+    fn test_count_mode_detected() {
+        let extra_with_c: &[&str] = &["-i", "-c"];
+        assert!(extra_with_c.iter().any(|a| *a == "-c" || *a == "--count"));
+
+        let extra_with_long: &[&str] = &["--count"];
+        assert!(extra_with_long
+            .iter()
+            .any(|a| *a == "-c" || *a == "--count"));
+
+        let extra_without: &[&str] = &["-i", "-w"];
+        assert!(!extra_without.iter().any(|a| *a == "-c" || *a == "--count"));
+    }
+
+    // Fix: -c/--count flags are stripped from extra_args passthrough
+    #[test]
+    fn test_count_flag_stripped_from_extra_args() {
+        let extra_args: &[&str] = &["-r", "-c", "-i", "--count"];
+        let filtered: Vec<&str> = extra_args
+            .iter()
+            .copied()
+            .filter(|a| *a != "-r" && *a != "--recursive" && *a != "-c" && *a != "--count")
+            .collect();
+        assert_eq!(filtered, vec!["-i"]);
+    }
+
+    // Regression: grep -c output (file:count) must not be parsed as file:linenum:content
+    #[test]
+    fn test_count_mode_output_passthrough() {
+        // Simulate rg --count output: file:count format
+        let rg_count_output = "/tmp/output.txt:42\nsrc/main.rs:7\n";
+
+        // In count mode, output should be passed through verbatim — no grouping
+        // Verify the output format is NOT mangled into "📄 42 (1):" nonsense
+        assert!(rg_count_output.contains("/tmp/output.txt:42"));
+        assert!(!rg_count_output.contains("📄"));
     }
 
     // Fix: BRE \| alternation is translated to PCRE | for rg

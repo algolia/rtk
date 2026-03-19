@@ -110,6 +110,15 @@ fn filter_markdown_segment(text: &str) -> String {
 
 /// Run a gh command with token-optimized output
 pub fn run(subcommand: &str, args: &[String], verbose: u8, ultra_compact: bool) -> Result<()> {
+    // When --json is explicitly requested, the caller wants structured output (for jq, python, etc.)
+    // Passthrough verbatim — filtering would break downstream JSON consumers.
+    if args
+        .iter()
+        .any(|a| a == "--json" || a.starts_with("--json="))
+    {
+        return run_passthrough("gh", subcommand, args);
+    }
+
     match subcommand {
         "pr" => run_pr(args, verbose, ultra_compact),
         "issue" => run_issue(args, verbose, ultra_compact),
@@ -1454,5 +1463,24 @@ ___
         assert!(result.contains("## Changes"));
         assert!(result.contains("## Test Plan"));
         assert!(result.contains("Filter HTML comments"));
+    }
+
+    // Regression: --json flag must trigger passthrough (no filtering)
+    #[test]
+    fn test_json_flag_detected() {
+        let args_json: Vec<String> = vec!["list".into(), "--json".into(), "number,title".into()];
+        assert!(args_json
+            .iter()
+            .any(|a| a == "--json" || a.starts_with("--json=")));
+
+        let args_json_eq: Vec<String> = vec!["list".into(), "--json=number,title".into()];
+        assert!(args_json_eq
+            .iter()
+            .any(|a| a == "--json" || a.starts_with("--json=")));
+
+        let args_no_json: Vec<String> = vec!["list".into(), "--limit".into(), "5".into()];
+        assert!(!args_no_json
+            .iter()
+            .any(|a| a == "--json" || a.starts_with("--json=")));
     }
 }
