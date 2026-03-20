@@ -1064,6 +1064,11 @@ fn run_branch(args: &[String], verbose: u8) -> Result<()> {
         return Ok(());
     }
 
+    // Detect if user explicitly asked for remotes
+    let user_wants_remotes = args
+        .iter()
+        .any(|a| a == "-a" || a == "--all" || a == "-r" || a == "--remotes");
+
     // List mode: show compact branch list
     let mut cmd = git_cmd();
     cmd.arg("branch");
@@ -1079,7 +1084,7 @@ fn run_branch(args: &[String], verbose: u8) -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let raw = stdout.to_string();
 
-    let filtered = filter_branch_output(&stdout);
+    let filtered = filter_branch_output(&stdout, user_wants_remotes);
     println!("{}", filtered);
 
     timer.track(
@@ -1092,7 +1097,7 @@ fn run_branch(args: &[String], verbose: u8) -> Result<()> {
     Ok(())
 }
 
-fn filter_branch_output(output: &str) -> String {
+fn filter_branch_output(output: &str, show_all_remotes: bool) -> String {
     let mut current = String::new();
     let mut local: Vec<String> = Vec::new();
     let mut remote: Vec<String> = Vec::new();
@@ -1127,18 +1132,29 @@ fn filter_branch_output(output: &str) -> String {
     }
 
     if !remote.is_empty() {
-        // Filter out remotes that already exist locally
-        let remote_only: Vec<&String> = remote
-            .iter()
-            .filter(|r| *r != &current && !local.contains(r))
-            .collect();
-        if !remote_only.is_empty() {
-            result.push(format!("  remote-only ({}):", remote_only.len()));
-            for b in remote_only.iter().take(10) {
+        if show_all_remotes {
+            // User explicitly asked for remotes — show all without dedup
+            result.push(format!("  remote ({}):", remote.len()));
+            for b in remote.iter().take(20) {
                 result.push(format!("    {}", b));
             }
-            if remote_only.len() > 10 {
-                result.push(format!("    ... +{} more", remote_only.len() - 10));
+            if remote.len() > 20 {
+                result.push(format!("    ... +{} more", remote.len() - 20));
+            }
+        } else {
+            // RTK auto-added -a — show only remote-only branches (dedup against local)
+            let remote_only: Vec<&String> = remote
+                .iter()
+                .filter(|r| *r != &current && !local.contains(r))
+                .collect();
+            if !remote_only.is_empty() {
+                result.push(format!("  remote-only ({}):", remote_only.len()));
+                for b in remote_only.iter().take(10) {
+                    result.push(format!("    {}", b));
+                }
+                if remote_only.len() > 10 {
+                    result.push(format!("    ... +{} more", remote_only.len() - 10));
+                }
             }
         }
     }
@@ -1460,9 +1476,9 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_branch_output() {
+    fn test_filter_branch_output_dedup() {
         let output = "* main\n  feature/auth\n  fix/bug-123\n  remotes/origin/HEAD -> origin/main\n  remotes/origin/main\n  remotes/origin/feature/auth\n  remotes/origin/release/v2\n";
-        let result = filter_branch_output(output);
+        let result = filter_branch_output(output, false);
         assert!(result.contains("* main"));
         assert!(result.contains("feature/auth"));
         assert!(result.contains("fix/bug-123"));
@@ -1472,9 +1488,23 @@ mod tests {
     }
 
     #[test]
+    fn test_filter_branch_output_show_all_remotes() {
+        let output = "* main\n  feature/auth\n  fix/bug-123\n  remotes/origin/HEAD -> origin/main\n  remotes/origin/main\n  remotes/origin/feature/auth\n  remotes/origin/release/v2\n";
+        let result = filter_branch_output(output, true);
+        assert!(result.contains("* main"));
+        // When user passes -a, ALL remotes shown (no dedup)
+        assert!(result.contains("remote (3):"));
+        assert!(result.contains("main"));
+        assert!(result.contains("feature/auth"));
+        assert!(result.contains("release/v2"));
+        // Should NOT say "remote-only"
+        assert!(!result.contains("remote-only"));
+    }
+
+    #[test]
     fn test_filter_branch_no_remotes() {
         let output = "* main\n  develop\n";
-        let result = filter_branch_output(output);
+        let result = filter_branch_output(output, false);
         assert!(result.contains("* main"));
         assert!(result.contains("develop"));
         assert!(!result.contains("remote-only"));
