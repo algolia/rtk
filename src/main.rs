@@ -186,18 +186,14 @@ enum Commands {
     },
 
     /// Find files with compact tree output
+    #[command(disable_help_flag = true)]
     Find {
-        /// Pattern to search (glob)
-        pattern: String,
-        /// Path to search in
-        #[arg(default_value = ".")]
-        path: String,
-        /// Maximum results to show
-        #[arg(short, long, default_value = "50")]
-        max: usize,
-        /// Filter by type: f (file), d (directory)
-        #[arg(short = 't', long, default_value = "f")]
-        file_type: String,
+        /// Print help
+        #[arg(long, action = clap::ArgAction::Help)]
+        help: Option<bool>,
+        /// All remaining arguments (parsed manually to support system-find predicates)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 
     /// Ultra-condensed diff (only changed lines)
@@ -1014,13 +1010,15 @@ fn main() -> Result<()> {
             env_cmd::run(filter.as_deref(), show_all, cli.verbose)?;
         }
 
-        Commands::Find {
-            pattern,
-            path,
-            max,
-            file_type,
-        } => {
-            find_cmd::run(&pattern, &path, max, &file_type, cli.verbose)?;
+        Commands::Find { args, .. } => {
+            if find_cmd::has_system_find_predicates(&args) {
+                find_cmd::run_system_find_raw(&args, cli.verbose)?;
+            } else {
+                // Parse RTK-style: rtk find <pattern> [path] [--max N] [--file-type f|d]
+                let pattern = args.first().map(|s| s.as_str()).unwrap_or("*");
+                let path = args.get(1).map(|s| s.as_str()).unwrap_or(".");
+                find_cmd::run(pattern, path, 50, "f", cli.verbose)?;
+            }
         }
 
         Commands::Diff {

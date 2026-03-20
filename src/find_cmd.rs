@@ -1,5 +1,5 @@
 use crate::tracking;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ignore::WalkBuilder;
 use std::collections::HashMap;
 use std::path::Path;
@@ -199,6 +199,68 @@ pub fn run(
         &rtk_output,
     );
 
+    Ok(())
+}
+
+/// System-find predicates that indicate the user wants system find, not RTK's glob finder.
+const FIND_PREDICATES: &[&str] = &[
+    "-name",
+    "-iname",
+    "-type",
+    "-maxdepth",
+    "-mindepth",
+    "-exec",
+    "-printf",
+    "-print0",
+    "-regex",
+    "-path",
+    "-perm",
+    "-newer",
+    "-size",
+    "-mtime",
+    "-atime",
+    "-ctime",
+    "-delete",
+    "-ls",
+    "-print",
+    "-quit",
+    "-prune",
+    "-empty",
+    "-readable",
+    "-writable",
+    "-executable",
+    "-user",
+    "-group",
+];
+
+/// Check if extra_args contain system-find predicates (e.g. -name, -type, -maxdepth)
+pub fn has_system_find_predicates(extra_args: &[String]) -> bool {
+    extra_args
+        .iter()
+        .any(|a| FIND_PREDICATES.contains(&a.as_str()))
+}
+
+/// Delegate to system find when predicates are detected.
+/// Takes raw args as passed by user (e.g. ["..", "-maxdepth", "2", "-name", "*.rs"])
+pub fn run_system_find_raw(args: &[String], _verbose: u8) -> Result<()> {
+    let timer = tracking::TimedExecution::start();
+
+    let mut cmd = std::process::Command::new("find");
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    let status = cmd.status().context("Failed to run system find")?;
+
+    let args_str = args.join(" ");
+    timer.track_passthrough(
+        &format!("find {}", args_str),
+        &format!("rtk find {} (passthrough to system find)", args_str),
+    );
+
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
     Ok(())
 }
 
