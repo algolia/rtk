@@ -1067,7 +1067,9 @@ fn pr_diff(args: &[String], _verbose: u8) -> Result<()> {
         print!("{}", msg);
         msg.to_string()
     } else {
-        let compacted = git::compact_diff(&raw, 100);
+        // PR diffs need more room than local diffs — 100 silently truncated
+        // multi-file PRs, causing DATA_LOSS for review agents (FUZZ-009/gh)
+        let compacted = git::compact_diff(&raw, 500);
         println!("{}", compacted);
         compacted
     };
@@ -1482,5 +1484,49 @@ ___
         assert!(!args_no_json
             .iter()
             .any(|a| a == "--json" || a.starts_with("--json=")));
+    }
+
+    // --- FUZZ-009/gh regression: pr diff must not silently truncate multi-file PRs ---
+
+    #[test]
+    fn test_pr_diff_not_truncated_at_100_lines() {
+        // Simulate a 5-file PR diff that generates ~250 compacted lines
+        let mut diff = String::new();
+        for i in 0..5 {
+            diff.push_str(&format!(
+                "diff --git a/src/file{}.rs b/src/file{}.rs\n",
+                i, i
+            ));
+            diff.push_str(&format!("--- a/src/file{}.rs\n", i));
+            diff.push_str(&format!("+++ b/src/file{}.rs\n", i));
+            for h in 0..3 {
+                diff.push_str(&format!(
+                    "@@ -{},10 +{},12 @@ fn func{}() {{\n",
+                    h * 10,
+                    h * 10,
+                    h
+                ));
+                for l in 0..15 {
+                    diff.push_str(&format!("+    let x{} = {};\n", l, l));
+                }
+            }
+        }
+
+        // With old limit of 100, this would truncate after ~2 files
+        let compacted = git::compact_diff(&diff, 500);
+
+        // All 5 files must appear in output
+        for i in 0..5 {
+            assert!(
+                compacted.contains(&format!("file{}.rs", i)),
+                "file{}.rs missing from compacted diff — truncated too early",
+                i
+            );
+        }
+        // Should NOT contain the truncation marker
+        assert!(
+            !compacted.contains("more changes truncated"),
+            "5-file PR diff should not be truncated at max_lines=500"
+        );
     }
 }
