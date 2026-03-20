@@ -239,6 +239,49 @@ COMMAND_FAMILIES = {
         "context": "two files that exist in the project",
         "note": "Compare two real files e.g. 'diff src/main.rs Cargo.toml'. Files should exist.",
     },
+    # ── New families (fuzzer v2) ──────────────────────────────────────
+    "separator": {
+        "rtk_cmd": "rtk",
+        "raw_cmd": "",
+        "focus_flags": ["--"],
+        "context": "Commands using -- separator to delimit flags from args",
+        "note": "Test that -- separator is preserved. Generate commands like 'cargo test -- --test-threads=1' or 'git log -- src/main.rs'. The -- must survive RTK's arg parsing.",
+    },
+    "gh-issue": {
+        "rtk_cmd": "rtk gh issue",
+        "raw_cmd": "gh issue",
+        "focus_flags": ["--json", "--jq", "--template", "--comments", "--state"],
+        "context": "GitHub repository with issues",
+        "note": "Use 'list' subcommand. Test --json with different field sets.",
+    },
+    "gh-api": {
+        "rtk_cmd": "rtk gh api",
+        "raw_cmd": "gh api",
+        "focus_flags": ["--jq", "-q", "--template", "-H", "--method GET"],
+        "context": "GitHub API access",
+        "note": "Use read-only API endpoints like 'repos/algolia/rtk' or 'repos/algolia/rtk/pulls?per_page=2'. Always GET.",
+    },
+    "empty-output": {
+        "rtk_cmd": "rtk",
+        "raw_cmd": "",
+        "focus_flags": [],
+        "context": "Commands that produce empty or minimal output",
+        "note": "Test edge cases: no matches, clean repos, empty results. RTK must not panic or produce errors on empty input.",
+    },
+    "large-output": {
+        "rtk_cmd": "rtk",
+        "raw_cmd": "",
+        "focus_flags": [],
+        "context": "Commands producing large output — test truncation behavior",
+        "note": "Generate commands that produce 100+ lines. RTK should compress but not lose critical data. E.g. 'git log -100', 'rg pattern . --no-heading', 'ls -laR src/'.",
+    },
+    "stderr-commands": {
+        "rtk_cmd": "rtk",
+        "raw_cmd": "",
+        "focus_flags": [],
+        "context": "Commands that produce output on stderr (not stdout)",
+        "note": "Test that stderr content survives RTK filtering. E.g. 'cargo clippy' (warnings on stderr), 'cargo check' (errors on stderr).",
+    },
 }
 
 # Static regression test cases — always run, no LLM needed
@@ -340,6 +383,45 @@ STATIC_TESTS = {
     ],
     "curl": [
         "curl -sI --max-time 5 https://httpbin.org/get",
+    ],
+    # ── New families (fuzzer v2) ──────────────────────────────────────
+    "separator": [
+        # -- separator between tool flags and underlying tool flags
+        "git log -- src/main.rs",
+        "git log --oneline -- src/main.rs",
+        "git diff HEAD~1 -- src/main.rs",
+        "grep -- 'fn ' src/main.rs",
+        # cargo -- passthrough to test binary
+        "cargo test -- --test-threads=1",
+    ],
+    "gh-issue": [
+        "gh issue list --json number,title,state --state all",
+        "gh issue list --state closed --limit 3",
+    ],
+    "gh-api": [
+        "gh api repos/algolia/rtk --jq '.name'",
+        "gh api repos/algolia/rtk/pulls?per_page=2 --jq '.[].title'",
+    ],
+    "large-output": [
+        # Large result sets — test truncation behavior
+        "git log --oneline -100",
+        "git log --stat -50",
+        "rg 'fn ' . --no-heading",
+        "rg 'use ' . --no-heading",
+        "ls -laR src/",
+    ],
+    "stderr-commands": [
+        # Commands that produce output on stderr (not just stdout)
+        "cargo clippy --all-targets",
+        "cargo check",
+    ],
+    "empty-output": [
+        # No matches / clean state — must not panic
+        "rg 'ZZZZNONEXISTENT_PATTERN' .",
+        "git log --author=zzzzz_nobody -1",
+        "git diff HEAD HEAD",
+        "find . -name '*.ZZZNONEXISTENT'",
+        "wc -l /dev/null",
     ],
 }
 
@@ -564,6 +646,23 @@ def cmd_to_rtk(cmd: str, family: dict) -> str:
     raw_prefix = family["raw_cmd"]
     rtk_prefix = family["rtk_cmd"]
 
+    # Multi-command families (separator, empty-output, etc.) have no single
+    # raw_cmd prefix — detect the base command and prepend rtk
+    if not raw_prefix:
+        parts = cmd.split()
+        if parts:
+            base = parts[0]
+            # Map known commands to their rtk equivalents
+            RTK_MAP = {
+                "git": "rtk git", "rg": "rtk grep", "grep": "rtk grep",
+                "cargo": "rtk cargo", "find": "rtk find", "ls": "rtk ls",
+                "wc": "rtk wc", "diff": "rtk diff", "tree": "rtk tree",
+                "gh": "rtk gh", "curl": "rtk curl", "cat": "rtk read",
+            }
+            if base in RTK_MAP:
+                return RTK_MAP[base] + cmd[len(base):]
+        return f"rtk {cmd}"
+
     if cmd.startswith(raw_prefix):
         return rtk_prefix + cmd[len(raw_prefix):]
     return f"rtk {cmd}"
@@ -650,6 +749,11 @@ def compare_outputs(raw: RunResult, rtk: RunResult, cmd: str) -> list[Issue]:
 
     # 6. Format Preservation (machine-readable flags)
     issue = _check_format_preservation(raw_out, rtk_out, cmd)
+    if issue:
+        issues.append(issue)
+
+    # 7. Stderr Loss (for commands that produce output on stderr)
+    issue = _check_stderr_loss(raw, rtk)
     if issue:
         issues.append(issue)
 
@@ -762,11 +866,46 @@ def _check_format_preservation(raw: str, rtk: str, cmd: str) -> Optional[Issue]:
     return None
 
 
+def _check_stderr_loss(raw: RunResult, rtk: RunResult) -> Optional[Issue]:
+    """If raw has significant stderr content but RTK has none (stdout+stderr), flag it."""
+    raw_stderr = raw.stderr.strip() if raw.stderr else ""
+    rtk_stderr = rtk.stderr.strip() if rtk.stderr else ""
+    rtk_stdout = rtk.stdout.strip() if rtk.stdout else ""
+
+    # Only flag if raw has substantial stderr (>50 chars, not just warnings)
+    if len(raw_stderr) < 50:
+        return None
+
+    # RTK may legitimately move stderr content to stdout (e.g., cargo clippy filter)
+    # So check if the content appears in EITHER stdout or stderr
+    if rtk_stderr or rtk_stdout:
+        # Sample a few tokens from raw stderr to check they survived somewhere
+        raw_lines = [l for l in raw_stderr.splitlines() if l.strip()][:5]
+        anchors = []
+        for line in raw_lines:
+            tokens = line.split()
+            for tok in tokens[:2]:
+                clean = tok.strip(",:;()[]{}\"'")
+                if len(clean) >= 4:
+                    anchors.append(clean)
+                    break
+        if not anchors:
+            return None
+        combined_rtk = rtk_stdout + "\n" + rtk_stderr
+        missing = [a for a in anchors if a not in combined_rtk]
+        if len(missing) > len(anchors) * 0.5:
+            return Issue("STDERR_LOSS", f"Raw stderr content lost: {len(missing)}/{len(anchors)} anchors missing")
+    elif raw_stderr and not rtk_stderr and not rtk_stdout:
+        return Issue("STDERR_LOSS", "Raw has stderr output but RTK produced nothing")
+
+    return None
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Verdict
 # ──────────────────────────────────────────────────────────────────────
 
-CRITICAL_ISSUES = {"JSON_MANGLED", "EXIT_CODE_MISMATCH", "FORMAT_ALTERED", "DATA_LOSS", "RTK_ERROR"}
+CRITICAL_ISSUES = {"JSON_MANGLED", "EXIT_CODE_MISMATCH", "FORMAT_ALTERED", "DATA_LOSS", "RTK_ERROR", "STDERR_LOSS"}
 
 
 def determine_verdict(issues: list[Issue]) -> str:
@@ -782,8 +921,11 @@ def determine_verdict(issues: list[Issue]) -> str:
 # ──────────────────────────────────────────────────────────────────────
 
 
-def preflight() -> tuple[str, str]:
-    """Run preflight checks. Returns (rtk_version, vault_token)."""
+def preflight(needs_llm: bool = True) -> tuple[str, str]:
+    """Run preflight checks. Returns (rtk_version, vault_token).
+
+    If needs_llm=False (static-only run), vault and API checks are skipped.
+    """
     print("Preflight checks...", file=sys.stderr)
 
     # 1. RTK installed
@@ -795,25 +937,30 @@ def preflight() -> tuple[str, str]:
         print("  FAIL: rtk not installed", file=sys.stderr)
         sys.exit(1)
 
-    # 2. Vault token
-    token = fetch_vault_token()
-    print(f"  vault: ok (token {len(token)} chars)", file=sys.stderr)
+    if not needs_llm:
+        print("  vault: skipped (static-only run)", file=sys.stderr)
+        print("  api: skipped (static-only run)", file=sys.stderr)
+        token = ""
+    else:
+        # 2. Vault token
+        token = fetch_vault_token()
+        print(f"  vault: ok (token {len(token)} chars)", file=sys.stderr)
 
-    # 3. API connectivity
-    try:
-        resp = requests.get(
-            "https://inference.api.enablers.algolia.net/v1/models",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        models = [m["id"] for m in resp.json().get("data", [])]
-        print(f"  api: ok ({', '.join(models)})", file=sys.stderr)
-        if API_MODEL not in models and "large" not in models:
-            print(f"  WARN: {API_MODEL} not in available models", file=sys.stderr)
-    except Exception as e:
-        print(f"  FAIL: API connectivity: {e}", file=sys.stderr)
-        sys.exit(1)
+        # 3. API connectivity
+        try:
+            resp = requests.get(
+                "https://inference.api.enablers.algolia.net/v1/models",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            models = [m["id"] for m in resp.json().get("data", [])]
+            print(f"  api: ok ({', '.join(models)})", file=sys.stderr)
+            if API_MODEL not in models and "large" not in models:
+                print(f"  WARN: {API_MODEL} not in available models", file=sys.stderr)
+        except Exception as e:
+            print(f"  FAIL: API connectivity: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # 4. Git
     try:
@@ -1017,7 +1164,8 @@ def main():
         families = list(COMMAND_FAMILIES.keys())
 
     # Preflight
-    rtk_version, token = preflight()
+    needs_llm = args.rounds > 0
+    rtk_version, token = preflight(needs_llm=needs_llm)
 
     # Test repo
     if args.use_cwd:
