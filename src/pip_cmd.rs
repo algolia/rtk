@@ -1,4 +1,5 @@
 use crate::tracking;
+use crate::utils;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::process::Command;
@@ -33,10 +34,8 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
             run_passthrough(base_cmd, args, verbose)?
         }
         _ => {
-            anyhow::bail!(
-                "rtk pip: unsupported subcommand '{}'\nSupported: list, outdated, install, uninstall, show",
-                subcommand
-            );
+            // Unknown subcommand — passthrough rather than fail
+            run_passthrough(base_cmd, args, verbose)?
         }
     };
 
@@ -51,6 +50,13 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 }
 
 fn run_list(base_cmd: &str, args: &[String], verbose: u8) -> Result<(String, String)> {
+    // If user specified --format, respect their choice and passthrough
+    if utils::has_output_format_flag(args, &["--format"]) {
+        let mut full_args = vec!["list".to_string()];
+        full_args.extend_from_slice(args);
+        return run_passthrough(base_cmd, &full_args, verbose);
+    }
+
     let mut cmd = Command::new(base_cmd);
 
     if base_cmd == "uv" {
@@ -86,6 +92,13 @@ fn run_list(base_cmd: &str, args: &[String], verbose: u8) -> Result<(String, Str
 }
 
 fn run_outdated(base_cmd: &str, args: &[String], verbose: u8) -> Result<(String, String)> {
+    // If user specified --format, respect their choice and passthrough
+    if utils::has_output_format_flag(args, &["--format"]) {
+        let mut full_args = vec!["list".to_string(), "--outdated".to_string()];
+        full_args.extend_from_slice(args);
+        return run_passthrough(base_cmd, &full_args, verbose);
+    }
+
     let mut cmd = Command::new(base_cmd);
 
     if base_cmd == "uv" {
