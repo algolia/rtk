@@ -240,6 +240,92 @@ COMMAND_FAMILIES = {
         "note": "Compare two real files e.g. 'diff src/main.rs Cargo.toml'. Files should exist.",
     },
     # ── New families (fuzzer v2) ──────────────────────────────────────
+    "docker-ps": {
+        "rtk_cmd": "rtk docker ps",
+        "raw_cmd": "docker ps",
+        "focus_flags": [
+            "-a", "--all", "-q", "--quiet", "--format", "--no-trunc",
+            "-f", "--filter", "--last", "--size",
+        ],
+        "context": "machine with Docker running",
+        "note": "RTK docker ps uses fixed command shape — no extra flags accepted by Clap. Test that -a, -q, --format survive.",
+    },
+    "docker-images": {
+        "rtk_cmd": "rtk docker images",
+        "raw_cmd": "docker images",
+        "focus_flags": [
+            "-a", "--all", "-q", "--quiet", "--format", "--no-trunc",
+            "--filter", "--digests",
+        ],
+        "context": "machine with Docker images",
+    },
+    "pip": {
+        "rtk_cmd": "rtk pip",
+        "raw_cmd": "pip",
+        "focus_flags": [
+            "list --format=columns", "list --format=freeze",
+            "list --user", "list --outdated",
+            "show", "list --not-required",
+        ],
+        "context": "Python environment with pip packages",
+        "note": "RTK forces --format=json for list/outdated. Test if user format flags survive.",
+    },
+    "go-test": {
+        "rtk_cmd": "rtk go test",
+        "raw_cmd": "go test",
+        "focus_flags": [
+            "-v", "-count=1", "-run", "-short", "-race",
+        ],
+        "context": "Go project (may not be available, skip gracefully)",
+        "note": "RTK always injects -json. Test if user -v flag conflicts.",
+    },
+    "npm": {
+        "rtk_cmd": "rtk npm",
+        "raw_cmd": "npm",
+        "focus_flags": [
+            "list --depth=0", "list --json", "outdated", "view",
+        ],
+        "context": "Node.js environment",
+        "note": "RTK npm is hardcoded to 'npm run'. Test if 'npm list', 'npm outdated' work.",
+    },
+    "ruff": {
+        "rtk_cmd": "rtk ruff",
+        "raw_cmd": "ruff",
+        "focus_flags": [
+            "check --output-format=text", "check --output-format=concise",
+            "format --check", "version",
+        ],
+        "context": "Python project (or any directory)",
+        "note": "RTK forces --output-format=json for check. Test user format override.",
+    },
+    "pytest": {
+        "rtk_cmd": "rtk pytest",
+        "raw_cmd": "pytest",
+        "focus_flags": [
+            "--tb=long", "--tb=no", "-v", "--co", "--collect-only",
+            "--lf", "-x",
+        ],
+        "context": "Python project with tests (may not be available)",
+        "note": "RTK injects --tb=short -q. Test if --tb=long or -v survives.",
+    },
+    "git-tag": {
+        "rtk_cmd": "rtk git tag",
+        "raw_cmd": "git tag",
+        "focus_flags": [
+            "--sort=-creatordate", "--sort=-version:refname",
+            "--format='%(refname:short) %(creatordate:short)'",
+            "-l", "-n",
+        ],
+        "context": "git repository with tags",
+        "note": "git tag is NOT in RTK's GitCommands enum — falls through to Other(). Test that it passes through correctly.",
+    },
+    "git-remote": {
+        "rtk_cmd": "rtk git remote",
+        "raw_cmd": "git remote",
+        "focus_flags": ["-v", "show origin", "get-url origin"],
+        "context": "git repository with remotes",
+        "note": "git remote is NOT in RTK's GitCommands enum — falls through to Other().",
+    },
     "separator": {
         "rtk_cmd": "rtk",
         "raw_cmd": "",
@@ -341,9 +427,19 @@ STATIC_TESTS = {
         "cargo build --message-format=short",
         "cargo check --message-format=json",
     ],
+    "cargo-test": [
+        "cargo test -q",
+        "cargo test -- --test-threads=1",
+        "cargo test -- --nocapture",
+        "cargo test --lib",
+        "cargo test --no-fail-fast",
+        "cargo test filter::tests::",
+    ],
     "cargo-clippy": [
         "cargo clippy --message-format=short",
         "cargo clippy -q",
+        "cargo clippy --all-targets",
+        "cargo clippy -- -W clippy::all",
     ],
     "cat": [
         "cat src/main.rs",
@@ -385,6 +481,74 @@ STATIC_TESTS = {
         "curl -sI --max-time 5 https://httpbin.org/get",
     ],
     # ── New families (fuzzer v2) ──────────────────────────────────────
+    "docker-ps": [
+        "docker ps",
+        "docker ps -a",
+        "docker ps -q",
+        "docker ps --format '{{.Names}} {{.Status}}'",
+        "docker ps -a --format '{{.ID}}\\t{{.Names}}\\t{{.Status}}'",
+        "docker ps --no-trunc",
+        "docker ps -a --filter status=running",
+        "docker ps --format json",
+    ],
+    "docker-images": [
+        "docker images",
+        "docker images -q",
+        "docker images --format '{{.Repository}}:{{.Tag}}'",
+        "docker images --no-trunc",
+        "docker images --digests",
+        "docker images --format json",
+    ],
+    "pip": [
+        "pip list",
+        "pip list --format=columns",
+        "pip list --format=freeze",
+        "pip list --outdated",
+        "pip list --not-required",
+        "pip show requests",
+        "pip show pip",
+    ],
+    "go-test": [
+        # These only work if we're in a Go project — fuzzer handles skip gracefully
+        "go version",
+        "go env GOPATH",
+        "go env GOROOT",
+    ],
+    "npm": [
+        "npm --version",
+        "npm list --depth=0",
+        "npm list --depth=0 --json",
+        "npm config list",
+    ],
+    "ruff": [
+        "ruff version",
+        "ruff check --output-format=text src/main.rs",
+        "ruff check --output-format=concise src/main.rs",
+    ],
+    "pytest": [
+        # Requires Python project with tests — test graceful handling
+        "pytest --version",
+        "pytest --co --quiet 2>/dev/null || true",
+    ],
+    "git-tag": [
+        "git tag",
+        "git tag -l",
+        "git tag -l 'v*'",
+        "git tag --sort=-creatordate",
+        "git tag --sort=-version:refname",
+        "git tag -n",
+        "git tag -l --format='%(refname:short) %(creatordate:short)'",
+    ],
+    "git-remote": [
+        "git remote",
+        "git remote -v",
+        "git remote show origin",
+        "git remote get-url origin",
+    ],
+    "git-stash": [
+        "git stash list",
+        "git stash list --format='%gd: %gs'",
+    ],
     "separator": [
         # -- separator between tool flags and underlying tool flags
         "git log -- src/main.rs",
@@ -658,6 +822,9 @@ def cmd_to_rtk(cmd: str, family: dict) -> str:
                 "cargo": "rtk cargo", "find": "rtk find", "ls": "rtk ls",
                 "wc": "rtk wc", "diff": "rtk diff", "tree": "rtk tree",
                 "gh": "rtk gh", "curl": "rtk curl", "cat": "rtk read",
+                "docker": "rtk docker", "pip": "rtk pip", "go": "rtk go",
+                "npm": "rtk npm", "ruff": "rtk ruff", "pytest": "rtk pytest",
+                "wget": "rtk wget", "kubectl": "rtk kubectl",
             }
             if base in RTK_MAP:
                 return RTK_MAP[base] + cmd[len(base):]
