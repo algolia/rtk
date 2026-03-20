@@ -1,4 +1,5 @@
 use crate::tracking;
+use crate::utils;
 use anyhow::{Context, Result};
 use std::ffi::OsString;
 use std::process::Command;
@@ -15,8 +16,8 @@ pub enum ContainerCmd {
 
 pub fn run(cmd: ContainerCmd, args: &[String], verbose: u8) -> Result<()> {
     match cmd {
-        ContainerCmd::DockerPs => docker_ps(verbose),
-        ContainerCmd::DockerImages => docker_images(verbose),
+        ContainerCmd::DockerPs => docker_ps(args, verbose),
+        ContainerCmd::DockerImages => docker_images(args, verbose),
         ContainerCmd::DockerLogs => docker_logs(args, verbose),
         ContainerCmd::KubectlPods => kubectl_pods(args, verbose),
         ContainerCmd::KubectlServices => kubectl_services(args, verbose),
@@ -24,23 +25,45 @@ pub fn run(cmd: ContainerCmd, args: &[String], verbose: u8) -> Result<()> {
     }
 }
 
-fn docker_ps(_verbose: u8) -> Result<()> {
+/// Format-changing flags for docker ps/images that should trigger passthrough.
+const DOCKER_FORMAT_FLAGS: &[&str] = &["--format", "-q", "--quiet"];
+
+fn docker_ps(args: &[String], verbose: u8) -> Result<()> {
+    // Format-changing flags → passthrough raw output
+    if utils::has_output_format_flag(args, DOCKER_FORMAT_FLAGS) {
+        return docker_passthrough_with_args("ps", args, verbose);
+    }
+
     let timer = tracking::TimedExecution::start();
 
-    let raw = Command::new("docker")
-        .args(["ps"])
+    // Build raw command (for token tracking) — includes user's content flags
+    let mut raw_cmd = Command::new("docker");
+    raw_cmd.arg("ps");
+    for arg in args {
+        raw_cmd.arg(arg);
+    }
+    let raw = raw_cmd
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
         .unwrap_or_default();
 
-    let output = Command::new("docker")
-        .args([
-            "ps",
-            "--format",
-            "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}",
-        ])
-        .output()
-        .context("Failed to run docker ps")?;
+    // Build filtered command — user's content flags + our format template
+    let mut cmd = Command::new("docker");
+    cmd.args([
+        "ps",
+        "--format",
+        "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}",
+    ]);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    let output = cmd.output().context("Failed to run docker ps")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("{}", stderr.trim());
+        std::process::exit(output.status.code().unwrap_or(1));
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut rtk = String::new();
@@ -86,19 +109,36 @@ fn docker_ps(_verbose: u8) -> Result<()> {
     Ok(())
 }
 
-fn docker_images(_verbose: u8) -> Result<()> {
+fn docker_images(args: &[String], verbose: u8) -> Result<()> {
+    // Format-changing flags → passthrough raw output
+    if utils::has_output_format_flag(args, DOCKER_FORMAT_FLAGS) {
+        return docker_passthrough_with_args("images", args, verbose);
+    }
+
     let timer = tracking::TimedExecution::start();
 
-    let raw = Command::new("docker")
-        .args(["images"])
+    let mut raw_cmd = Command::new("docker");
+    raw_cmd.arg("images");
+    for arg in args {
+        raw_cmd.arg(arg);
+    }
+    let raw = raw_cmd
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
         .unwrap_or_default();
 
-    let output = Command::new("docker")
-        .args(["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}"])
-        .output()
-        .context("Failed to run docker images")?;
+    let mut cmd = Command::new("docker");
+    cmd.args(["images", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}"]);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    let output = cmd.output().context("Failed to run docker images")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("{}", stderr.trim());
+        std::process::exit(output.status.code().unwrap_or(1));
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
@@ -525,6 +565,35 @@ fn compact_ports(ports: &str) -> String {
             port_nums.len() - 2
         )
     }
+}
+
+/// Passthrough for docker subcommands with format-changing flags (e.g. `docker ps --format json`)
+fn docker_passthrough_with_args(subcmd: &str, args: &[String], verbose: u8) -> Result<()> {
+    let timer = tracking::TimedExecution::start();
+
+    if verbose > 0 {
+        eprintln!(
+            "docker {} passthrough (format flag detected): {:?}",
+            subcmd, args
+        );
+    }
+    let mut cmd = Command::new("docker");
+    cmd.arg(subcmd);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    let status = cmd.status().context("Failed to run docker")?;
+
+    let args_str = args.join(" ");
+    timer.track_passthrough(
+        &format!("docker {} {}", subcmd, args_str),
+        &format!("rtk docker {} {} (passthrough)", subcmd, args_str),
+    );
+
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
+    Ok(())
 }
 
 /// Runs an unsupported docker subcommand by passing it through directly

@@ -225,6 +225,15 @@ pub fn package_manager_exec(tool: &str) -> Command {
     }
 }
 
+/// Check if args contain a format-changing flag that would conflict with RTK's filter.
+///
+/// Each caller provides the flag prefixes relevant to their tool.
+/// Uses `starts_with` matching so `--format=json` matches `--format`.
+pub fn has_output_format_flag(args: &[String], flag_prefixes: &[&str]) -> bool {
+    args.iter()
+        .any(|a| flag_prefixes.iter().any(|prefix| a.starts_with(prefix)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +403,29 @@ mod tests {
         let cjk = "你好世界测试字符串";
         let result = truncate(cjk, 6);
         assert!(result.ends_with("..."));
+    }
+
+    #[test]
+    fn test_has_output_format_flag_match() {
+        let args = vec!["list".into(), "--format=json".into()];
+        assert!(has_output_format_flag(&args, &["--format"]));
+    }
+
+    #[test]
+    fn test_has_output_format_flag_no_match() {
+        let args = vec!["list".into(), "--depth=0".into()];
+        assert!(!has_output_format_flag(&args, &["--format", "--json"]));
+    }
+
+    #[test]
+    fn test_has_output_format_flag_prefix() {
+        let args = vec!["--message-format=short".into()];
+        assert!(has_output_format_flag(&args, &["--message-format"]));
+    }
+
+    #[test]
+    fn test_has_output_format_flag_exact() {
+        let args = vec!["-q".into()];
+        assert!(has_output_format_flag(&args, &["-q", "--quiet"]));
     }
 }

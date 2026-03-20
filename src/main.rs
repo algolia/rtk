@@ -676,9 +676,15 @@ enum PnpmCommands {
 #[derive(Subcommand)]
 enum DockerCommands {
     /// List running containers
-    Ps,
+    Ps {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// List images
-    Images,
+    Images {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Show container logs (deduplicated)
     Logs { container: String },
     /// Docker Compose commands with compact output
@@ -1040,11 +1046,11 @@ fn main() -> Result<()> {
         }
 
         Commands::Docker { command } => match command {
-            DockerCommands::Ps => {
-                container::run(container::ContainerCmd::DockerPs, &[], cli.verbose)?;
+            DockerCommands::Ps { args } => {
+                container::run(container::ContainerCmd::DockerPs, &args, cli.verbose)?;
             }
-            DockerCommands::Images => {
-                container::run(container::ContainerCmd::DockerImages, &[], cli.verbose)?;
+            DockerCommands::Images { args } => {
+                container::run(container::ContainerCmd::DockerImages, &args, cli.verbose)?;
             }
             DockerCommands::Logs { container: c } => {
                 container::run(container::ContainerCmd::DockerLogs, &[c], cli.verbose)?;
