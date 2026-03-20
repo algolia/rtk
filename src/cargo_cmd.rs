@@ -57,9 +57,18 @@ where
         .unwrap_or(if output.status.success() { 0 } else { 1 });
     let filtered = filter_fn(&raw);
 
+    // Preserve output channel: cargo clippy/check produce on stderr
+    let use_stderr = stdout.trim().is_empty() && !stderr.trim().is_empty();
+
     if let Some(hint) = crate::tee::tee_and_hint(&raw, &format!("cargo_{}", subcommand), exit_code)
     {
-        println!("{}\n{}", filtered, hint);
+        if use_stderr {
+            eprintln!("{}\n{}", filtered, hint);
+        } else {
+            println!("{}\n{}", filtered, hint);
+        }
+    } else if use_stderr {
+        eprintln!("{}", filtered);
     } else {
         println!("{}", filtered);
     }
