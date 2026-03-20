@@ -3,6 +3,17 @@ use anyhow::{Context, Result};
 use std::process::Command;
 
 pub fn run(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
+    let subcommand = args.first().map(|s| s.as_str()).unwrap_or("run");
+
+    match subcommand {
+        // npm run <script> — filter boilerplate
+        "run" | "run-script" => run_script(&args[1..], verbose, skip_env),
+        // Everything else — passthrough (npm list, npm outdated, npm config, etc.)
+        _ => run_npm_passthrough(args, verbose, skip_env),
+    }
+}
+
+fn run_script(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
     let mut cmd = Command::new("npm");
@@ -37,6 +48,37 @@ pub fn run(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
 
     if !output.status.success() {
         std::process::exit(output.status.code().unwrap_or(1));
+    }
+
+    Ok(())
+}
+
+fn run_npm_passthrough(args: &[String], verbose: u8, skip_env: bool) -> Result<()> {
+    let timer = tracking::TimedExecution::start();
+
+    let mut cmd = Command::new("npm");
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    if skip_env {
+        cmd.env("SKIP_ENV_VALIDATION", "1");
+    }
+
+    if verbose > 0 {
+        eprintln!("Running: npm {}", args.join(" "));
+    }
+
+    let status = cmd.status().context("Failed to run npm")?;
+
+    let args_str = args.join(" ");
+    timer.track_passthrough(
+        &format!("npm {}", args_str),
+        &format!("rtk npm {} (passthrough)", args_str),
+    );
+
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
     }
 
     Ok(())
