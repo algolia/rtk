@@ -620,13 +620,80 @@ pub fn run_docker_passthrough(args: &[OsString], verbose: u8) -> Result<()> {
     Ok(())
 }
 
+/// Global compose flags that consume the next token as a value.
+const COMPOSE_FLAGS_WITH_VALUE: &[&str] = &[
+    "-f",
+    "--file",
+    "-p",
+    "--project-name",
+    "--project-directory",
+    "--profile",
+    "--env-file",
+    "--progress",
+    "--ansi",
+    "--parallel",
+];
+
+/// Split `docker compose <args>` into (global_flags, subcmd_and_rest).
+/// Returns `None` for subcmd_and_rest when there is no subcommand (flags only).
+fn split_compose_args(args: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut global_flags: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < args.len() {
+        let arg = &args[i];
+        if COMPOSE_FLAGS_WITH_VALUE.contains(&arg.as_str()) {
+            global_flags.push(arg.clone());
+            i += 1;
+            if i < args.len() {
+                global_flags.push(args[i].clone());
+            }
+        } else if arg.starts_with('-') {
+            global_flags.push(arg.clone());
+        } else {
+            // First non-flag: subcommand starts here
+            return (global_flags, args[i..].to_vec());
+        }
+        i += 1;
+    }
+
+    (global_flags, vec![])
+}
+
+/// Route `docker compose` args, splitting global flags from the subcommand.
+/// Handles e.g. `docker compose -f custom.yml build svc` correctly.
+pub fn run_compose(args: &[String], verbose: u8) -> Result<()> {
+    let (global_flags, subcmd_and_rest) = split_compose_args(args);
+
+    if subcmd_and_rest.is_empty() {
+        let all: Vec<OsString> = args.iter().map(OsString::from).collect();
+        return run_compose_passthrough(&all, verbose);
+    }
+
+    let subcmd = subcmd_and_rest[0].as_str();
+    let sub_args = &subcmd_and_rest[1..];
+
+    match subcmd {
+        "ps" => run_compose_ps(&global_flags, verbose),
+        "logs" => run_compose_logs(&global_flags, sub_args.first().map(String::as_str), verbose),
+        "build" => run_compose_build(&global_flags, sub_args.first().map(String::as_str), verbose),
+        _ => {
+            let mut all: Vec<OsString> = global_flags.iter().map(OsString::from).collect();
+            all.extend(subcmd_and_rest.iter().map(OsString::from));
+            run_compose_passthrough(&all, verbose)
+        }
+    }
+}
+
 /// Run `docker compose ps` with compact output
-pub fn run_compose_ps(verbose: u8) -> Result<()> {
+pub fn run_compose_ps(global_flags: &[String], verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
     // Raw output for token tracking
     let raw_output = Command::new("docker")
-        .args(["compose", "ps"])
+        .arg("compose")
+        .args(global_flags)
+        .arg("ps")
         .output()
         .context("Failed to run docker compose ps")?;
 
@@ -639,8 +706,9 @@ pub fn run_compose_ps(verbose: u8) -> Result<()> {
 
     // Structured output for parsing (same pattern as docker_ps)
     let output = Command::new("docker")
+        .arg("compose")
+        .args(global_flags)
         .args([
-            "compose",
             "ps",
             "--format",
             "{{.Name}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}",
@@ -666,11 +734,13 @@ pub fn run_compose_ps(verbose: u8) -> Result<()> {
 }
 
 /// Run `docker compose logs` with deduplication
-pub fn run_compose_logs(service: Option<&str>, verbose: u8) -> Result<()> {
+pub fn run_compose_logs(global_flags: &[String], service: Option<&str>, verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
     let mut cmd = Command::new("docker");
-    cmd.args(["compose", "logs", "--tail", "100"]);
+    cmd.arg("compose");
+    cmd.args(global_flags);
+    cmd.args(["logs", "--tail", "100"]);
     if let Some(svc) = service {
         cmd.arg(svc);
     }
@@ -704,11 +774,17 @@ pub fn run_compose_logs(service: Option<&str>, verbose: u8) -> Result<()> {
 }
 
 /// Run `docker compose build` with summary output
-pub fn run_compose_build(service: Option<&str>, verbose: u8) -> Result<()> {
+pub fn run_compose_build(
+    global_flags: &[String],
+    service: Option<&str>,
+    verbose: u8,
+) -> Result<()> {
     let timer = tracking::TimedExecution::start();
 
     let mut cmd = Command::new("docker");
-    cmd.args(["compose", "build"]);
+    cmd.arg("compose");
+    cmd.args(global_flags);
+    cmd.arg("build");
     if let Some(svc) = service {
         cmd.arg(svc);
     }
@@ -925,5 +1001,66 @@ api-1  | Connected to database";
     fn test_compact_ports_many() {
         let result = compact_ports("0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 0.0.0.0:8080->8080/tcp, 0.0.0.0:9090->9090/tcp");
         assert!(result.contains("..."), "should truncate for >3 ports");
+    }
+
+    // ── split_compose_args ─────────────────────────────────
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_split_compose_no_flags() {
+        let (flags, rest) = split_compose_args(&s(&["build", "web"]));
+        assert!(flags.is_empty());
+        assert_eq!(rest, s(&["build", "web"]));
+    }
+
+    #[test]
+    fn test_split_compose_f_flag_before_subcommand() {
+        // regression: docker compose -f custom.yml build
+        let (flags, rest) = split_compose_args(&s(&["-f", "custom.yml", "build"]));
+        assert_eq!(flags, s(&["-f", "custom.yml"]));
+        assert_eq!(rest, s(&["build"]));
+    }
+
+    #[test]
+    fn test_split_compose_f_flag_with_service() {
+        // docker compose -f deploy/docker-compose.yml build svc
+        let (flags, rest) =
+            split_compose_args(&s(&["-f", "deploy/docker-compose.yml", "build", "svc"]));
+        assert_eq!(flags, s(&["-f", "deploy/docker-compose.yml"]));
+        assert_eq!(rest, s(&["build", "svc"]));
+    }
+
+    #[test]
+    fn test_split_compose_multiple_global_flags() {
+        // docker compose -f a.yml -p myproject logs
+        let (flags, rest) = split_compose_args(&s(&["-f", "a.yml", "-p", "myproject", "logs"]));
+        assert_eq!(flags, s(&["-f", "a.yml", "-p", "myproject"]));
+        assert_eq!(rest, s(&["logs"]));
+    }
+
+    #[test]
+    fn test_split_compose_boolean_flag() {
+        // docker compose --verbose ps
+        let (flags, rest) = split_compose_args(&s(&["--verbose", "ps"]));
+        assert_eq!(flags, s(&["--verbose"]));
+        assert_eq!(rest, s(&["ps"]));
+    }
+
+    #[test]
+    fn test_split_compose_flags_only() {
+        // docker compose -f foo.yml (no subcommand)
+        let (flags, rest) = split_compose_args(&s(&["-f", "foo.yml"]));
+        assert_eq!(flags, s(&["-f", "foo.yml"]));
+        assert!(rest.is_empty());
+    }
+
+    #[test]
+    fn test_split_compose_ps_no_flags() {
+        let (flags, rest) = split_compose_args(&s(&["ps"]));
+        assert!(flags.is_empty());
+        assert_eq!(rest, s(&["ps"]));
     }
 }

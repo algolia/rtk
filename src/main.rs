@@ -685,29 +685,11 @@ enum DockerCommands {
     Logs { container: String },
     /// Docker Compose commands with compact output
     Compose {
-        #[command(subcommand)]
-        command: ComposeCommands,
+        /// Compose arguments (global flags + subcommand + args)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
     /// Passthrough: runs any unsupported docker subcommand directly
-    #[command(external_subcommand)]
-    Other(Vec<OsString>),
-}
-
-#[derive(Subcommand)]
-enum ComposeCommands {
-    /// List compose services (compact)
-    Ps,
-    /// Show compose logs (deduplicated)
-    Logs {
-        /// Optional service name
-        service: Option<String>,
-    },
-    /// Build compose services (summary)
-    Build {
-        /// Optional service name
-        service: Option<String>,
-    },
-    /// Passthrough: runs any unsupported compose subcommand directly
     #[command(external_subcommand)]
     Other(Vec<OsString>),
 }
@@ -1053,20 +1035,9 @@ fn main() -> Result<()> {
             DockerCommands::Logs { container: c } => {
                 container::run(container::ContainerCmd::DockerLogs, &[c], cli.verbose)?;
             }
-            DockerCommands::Compose { command: compose } => match compose {
-                ComposeCommands::Ps => {
-                    container::run_compose_ps(cli.verbose)?;
-                }
-                ComposeCommands::Logs { service } => {
-                    container::run_compose_logs(service.as_deref(), cli.verbose)?;
-                }
-                ComposeCommands::Build { service } => {
-                    container::run_compose_build(service.as_deref(), cli.verbose)?;
-                }
-                ComposeCommands::Other(args) => {
-                    container::run_compose_passthrough(&args, cli.verbose)?;
-                }
-            },
+            DockerCommands::Compose { args } => {
+                container::run_compose(&args, cli.verbose)?;
+            }
             DockerCommands::Other(args) => {
                 container::run_docker_passthrough(&args, cli.verbose)?;
             }
