@@ -13,8 +13,6 @@ pub struct Config {
     #[serde(default)]
     pub tee: crate::tee::TeeConfig,
     #[serde(default)]
-    pub telemetry: TelemetryConfig,
-    #[serde(default)]
     pub hooks: HooksConfig,
     #[serde(default)]
     pub limits: LimitsConfig,
@@ -86,17 +84,6 @@ impl Default for FilterConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TelemetryConfig {
-    pub enabled: bool,
-}
-
-impl Default for TelemetryConfig {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct LimitsConfig {
     /// Max total grep results to show (default: 200)
     pub grep_max_results: usize,
@@ -125,11 +112,6 @@ impl Default for LimitsConfig {
 /// Get limits config. Falls back to defaults if config can't be loaded.
 pub fn limits() -> LimitsConfig {
     Config::load().map(|c| c.limits).unwrap_or_default()
-}
-
-/// Check if telemetry is enabled in config. Returns None if config can't be loaded.
-pub fn telemetry_enabled() -> Option<bool> {
-    Config::load().ok().map(|c| c.telemetry.enabled)
 }
 
 impl Config {

@@ -898,7 +898,8 @@ impl Tracker {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    /// Count commands since a given timestamp (for telemetry).
+    /// Count commands since a given timestamp.
+    #[allow(dead_code)]
     pub fn count_commands_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
         let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
         let count: i64 = self.conn.query_row(
@@ -909,7 +910,8 @@ impl Tracker {
         Ok(count)
     }
 
-    /// Get top N commands by frequency (for telemetry).
+    /// Get top N commands by frequency (analytics).
+    #[allow(dead_code)]
     pub fn top_commands(&self, limit: usize) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT rtk_cmd, COUNT(*) as cnt FROM commands
@@ -923,7 +925,8 @@ impl Tracker {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    /// Get overall savings percentage (for telemetry).
+    /// Get overall savings percentage (analytics).
+    #[allow(dead_code)]
     pub fn overall_savings_pct(&self) -> Result<f64> {
         let (total_input, total_saved): (i64, i64) = self.conn.query_row(
             "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(saved_tokens), 0) FROM commands",
@@ -937,7 +940,8 @@ impl Tracker {
         }
     }
 
-    /// Get total tokens saved across all tracked commands (for telemetry).
+    /// Get total tokens saved across all tracked commands (analytics).
+    #[allow(dead_code)]
     pub fn total_tokens_saved(&self) -> Result<i64> {
         let saved: i64 = self.conn.query_row(
             "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands",
@@ -947,7 +951,8 @@ impl Tracker {
         Ok(saved)
     }
 
-    /// Get tokens saved in the last 24 hours (for telemetry).
+    /// Get tokens saved in the last 24 hours (analytics).
+    #[allow(dead_code)]
     pub fn tokens_saved_24h(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
         let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
         let saved: i64 = self.conn.query_row(

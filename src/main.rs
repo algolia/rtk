@@ -56,7 +56,6 @@ mod runner;
 mod session_cmd;
 mod summary;
 mod tee;
-mod telemetry;
 mod toml_filter;
 mod tracking;
 mod tree;
@@ -1269,9 +1268,6 @@ fn shell_split(input: &str) -> Vec<String> {
 }
 
 fn main() -> Result<()> {
-    // Fire-and-forget telemetry ping (1/day, non-blocking)
-    telemetry::maybe_ping();
-
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
