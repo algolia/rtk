@@ -17,9 +17,9 @@ All rewrite logic lives in RTK itself (`rtk rewrite`). This plugin is a thin del
 RTK must be installed and available in `$PATH`:
 
 ```bash
-brew install rtk
-# or
 curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
+# or
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### Install the plugin

@@ -11,7 +11,6 @@
   <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord" alt="Discord"></a>
-  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
@@ -56,12 +55,6 @@ rtk filters and compresses command outputs before they reach your LLM context. S
 > Estimates based on medium-sized TypeScript/Rust projects. Actual savings vary by project size.
 
 ## Installation
-
-### Homebrew (recommended)
-
-```bash
-brew install rtk
-```
 
 ### Quick Install (Linux/macOS)
 
@@ -449,7 +442,6 @@ FAILED: 2/15 tests
 ```bash
 rtk init -g --uninstall     # Remove hook, RTK.md, settings.json entry
 cargo uninstall rtk          # Remove binary
-brew uninstall rtk           # If installed via Homebrew
 ```
 
 ## Documentation
@@ -460,27 +452,9 @@ brew uninstall rtk           # If installed via Homebrew
 - **[SECURITY.md](SECURITY.md)** - Security policy and PR review process
 - **[AUDIT_GUIDE.md](docs/AUDIT_GUIDE.md)** - Token savings analytics guide
 
-## Privacy & Telemetry
+## Privacy
 
-RTK collects **anonymous, aggregate usage metrics** once per day to help prioritize development. This is standard practice for open-source CLI tools.
-
-**What is collected:**
-- Device hash (SHA-256 of hostname+username, not reversible)
-- RTK version, OS, architecture
-- Command count (last 24h) and top command names (e.g. "git", "cargo" — no arguments, no file paths)
-- Token savings percentage
-
-**What is NOT collected:** source code, file paths, command arguments, secrets, environment variables, or any personally identifiable information.
-
-**Opt-out** (any of these):
-```bash
-# Environment variable
-export RTK_TELEMETRY_DISABLED=1
-
-# Or in config file (~/.config/rtk/config.toml)
-[telemetry]
-enabled = false
-```
+This fork has **no telemetry**. RTK stores token savings locally in SQLite (`~/.local/share/rtk/tracking.db`) for `rtk gain` analytics — nothing leaves your machine.
 
 ## Contributing
 

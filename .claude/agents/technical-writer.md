@@ -107,9 +107,9 @@ cargo test test_token_savings
 
 ## macOS
 
-**Option 1: Homebrew**
+**Option 1: Quick Install**
 ```bash
-brew install algolia/tap/rtk
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/master/install.sh | sh
 rtk --version  # Should show rtk X.Y.Z
 ```
 

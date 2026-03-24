@@ -173,8 +173,8 @@ options:
     description: "Installer RTK localement (si dans le repo)"
   - label: "cargo install rtk"
     description: "Installer RTK depuis crates.io (dernière release)"
-  - label: "brew install algolia/tap/rtk"
-    description: "Installer RTK via Homebrew (macOS/Linux)"
+  - label: "curl -fsSL https://raw.githubusercontent.com/algolia/rtk/master/install.sh | sh"
+    description: "Installer RTK via script (macOS/Linux)"
 ```
 
 ### Si hooks manquants/non exécutables

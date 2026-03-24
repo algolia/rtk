@@ -264,7 +264,6 @@ rtk init -g --uninstall
 cargo uninstall rtk
 
 # If installed via package manager
-brew uninstall rtk          # macOS Homebrew
 sudo apt remove rtk         # Debian/Ubuntu
 sudo dnf remove rtk         # Fedora/RHEL
 ```

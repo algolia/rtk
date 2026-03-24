@@ -21,7 +21,7 @@ RTK is a CLI tool that executes shell commands and handles user input. PRs from 
 - **Shell injection** (command execution vulnerabilities)
 - **Supply chain attacks** (malicious dependencies)
 - **Backdoors** (logic bombs, exfiltration code)
-- **Data leaks** (tracking.db exposure, telemetry abuse)
+- **Data leaks** (tracking.db exposure)
 
 ---
 
@@ -50,7 +50,7 @@ The following files are considered **high-risk** and trigger mandatory 2-reviewe
 ### Tier 1: Shell Execution & System Interaction
 - **`src/runner.rs`** - Shell command execution engine (primary injection vector)
 - **`src/summary.rs`** - Command output aggregation (data exfiltration risk)
-- **`src/tracking.rs`** - SQLite database operations (privacy/telemetry concerns)
+- **`src/tracking.rs`** - SQLite database operations (local privacy concerns)
 - **`src/discover/registry.rs`** - Rewrite logic for all commands (command injection risk via rewrite rules)
 - **`hooks/rtk-rewrite.sh`** / **`.claude/hooks/rtk-rewrite.sh`** - Thin delegator hook (executes in Claude Code context, intercepts all commands)
 
