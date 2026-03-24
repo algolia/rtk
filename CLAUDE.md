@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **rtk (Rust Token Killer)** is a high-performance CLI proxy that minimizes LLM token consumption by filtering and compressing command outputs. It achieves 60-90% token savings on common development operations through smart filtering, grouping, truncation, and deduplication.
 
-This is a fork with critical fixes for git argument parsing and modern JavaScript stack support (pnpm, vitest, Next.js, TypeScript, Playwright, Prisma).
+This is the **algolia/rtk** fork of rtk-ai/rtk, tracking upstream with telemetry stripped and targeted bug fixes.
 
 ### ⚠️ Name Collision Warning
 
@@ -358,51 +358,58 @@ pub fn execute_with_filter(cmd: &str, args: &[&str]) -> Result<()> {
 - Preserve stdout/stderr separation
 - Respect exit codes (0 = success, non-zero = failure)
 
-## Fork-Specific Features
+## Fork Policy (algolia/rtk)
 
-### PR #5: Git Argument Parsing Fix (CRITICAL)
-- **Problem**: Git flags like `--oneline`, `--cached` were rejected
-- **Solution**: Fixed Clap parsing with proper trailing_var_arg configuration
-- **Impact**: All git commands now accept native git flags
+### What we change from upstream (rtk-ai/rtk)
+- **Telemetry stripped**: No phone-home, no ureq/hostname deps, no opt-out config
+- **Targeted bug fixes**: Only when upstream hasn't addressed the issue
+- **Homebrew removed**: GitHub Releases + install.sh only
+- **Branding**: All repo URLs point to algolia/rtk
 
-### PR #6: pnpm Support
-- **New Commands**: `rtk pnpm list`, `rtk pnpm outdated`, `rtk pnpm install`
-- **Token Savings**: 70-90% reduction on package manager operations
-- **Security**: Package name validation prevents command injection
+### What we DON'T change
+- All upstream features, filters, commands, TOML DSL, rewrite engine
+- Test suite (1087 tests must pass)
+- Architecture and module structure
 
-### PR #9: Modern JavaScript/TypeScript Tooling (2026-01-29)
-- **New Commands**: 6 commands for T3 Stack workflows
-  - `rtk lint`: ESLint/Biome with grouped rule violations (84% reduction)
-  - `rtk tsc`: TypeScript compiler errors grouped by file/code (83% reduction)
-  - `rtk next`: Next.js build with route/bundle metrics (87% reduction)
-  - `rtk prettier`: Format checker showing files needing changes (70% reduction)
-  - `rtk playwright`: E2E test results showing failures only (94% reduction)
-  - `rtk prisma`: Prisma CLI without ASCII art (88% reduction)
-- **Shared Infrastructure**: utils.rs module for package manager auto-detection
-- **Features**: Exit code preservation, error grouping, consistent formatting
-- **Testing**: Validated on a production T3 Stack project
+### Upstream Catchup Procedure
 
-### Python & Go Support (2026-02-12)
-- **Python Commands**: 3 commands for Python development workflows
-  - `rtk ruff check/format`: Ruff linter/formatter with JSON (check) and text (format) parsing (80%+ reduction)
-  - `rtk pytest`: Pytest test runner with state machine text parser (90%+ reduction)
-  - `rtk pip list/outdated/install`: pip package manager with auto-detect uv (70-85% reduction)
-- **Go Commands**: 4 commands via sub-enum for Go ecosystem
-  - `rtk go test`: NDJSON line-by-line parser for interleaved events (90%+ reduction)
-  - `rtk go build`: Text filter showing errors only (80% reduction)
-  - `rtk go vet`: Text filter for issues (75% reduction)
-  - `rtk golangci-lint`: JSON parsing grouped by rule (85% reduction)
-- **Architecture**: Standalone Python commands (mirror lint/prettier), Go sub-enum (mirror git/cargo)
-- **Patterns**: JSON for structured output (ruff check, golangci-lint, pip), NDJSON streaming (go test), text state machine (pytest), text filters (go build/vet, ruff format)
+When upstream (rtk-ai/rtk) has new releases to absorb:
 
-### Ruby on Rails Support (2026-03-15)
-- **Ruby Commands**: 3 modules for Ruby/Rails development
-  - `rtk rspec`: RSpec test runner with JSON injection (`--format json`), text fallback (60%+ reduction)
-  - `rtk rubocop`: RuboCop linter with JSON injection, group by cop/severity (60%+ reduction)
-  - `rtk rake test`: Minitest filter via rake/rails test, state machine parser (85-90% reduction)
-- **TOML Filter**: `bundle-install.toml` for bundle install/update — strips `Using` lines (90%+ reduction)
-- **Shared Infrastructure**: `ruby_exec()` in utils.rs auto-detects `bundle exec` when Gemfile exists
-- **Hook Integration**: Rewrites `rspec`, `rubocop`, `rake test`, `rails test`, `bundle exec` variants
+```bash
+# 1. Fetch upstream
+git fetch upstream
+
+# 2. Create realignment branch from upstream/master
+git checkout -b fork/upstream-realign upstream/master
+
+# 3. Strip telemetry (always required)
+#    - Delete src/telemetry.rs
+#    - Remove `mod telemetry;` and `telemetry::maybe_ping();` from main.rs
+#    - Remove TelemetryConfig from config.rs
+#    - Remove telemetry notice from init.rs
+#    - Remove ureq + hostname from Cargo.toml (keep sha2 — used by integrity.rs)
+#    - Add #[allow(dead_code)] to tracking methods only called by telemetry
+#    - Remove RTK_TELEMETRY_URL/TOKEN from .github/workflows/release.yml
+
+# 4. Rebrand: sed -i 's|rtk-ai/rtk|algolia/rtk|g' across all files
+#    Also update rtk-ai/tap → algolia/tap, rtk-ai/homebrew-tap → algolia/homebrew-tap
+
+# 5. Build + test
+cargo fmt --all && cargo clippy --all-targets && cargo test --all
+
+# 6. Re-test bug reports against new base
+#    For each bug-reports/*.md: test the reproducer on the new binary.
+#    Upstream fixes most issues over time — only re-apply patches still needed.
+
+# 7. Commit fork patches (only what upstream hasn't fixed)
+
+# 8. Replace main branch
+git checkout main && git reset --hard fork/upstream-realign
+git push --force-with-lease origin HEAD:main
+```
+
+**Key principle**: Upstream is authoritative. We stay as thin as possible.
+Always check upstream for fixes before writing our own (see feedback memory).
 
 ## Testing Strategy
 
