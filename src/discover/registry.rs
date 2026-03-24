@@ -611,6 +611,16 @@ fn rewrite_segment(seg: &str, excluded: &[String]) -> Option<String> {
         return None;
     }
 
+    // grep/rg with -h (suppress filename) collides with clap's --help short flag.
+    // Skip rewrite so the raw command runs unmodified.
+    if rule.rtk_cmd == "rtk grep"
+        && cmd_clean
+            .split_whitespace()
+            .any(|a| a == "-h" || (a.starts_with('-') && !a.starts_with("--") && a.contains('h')))
+    {
+        return None;
+    }
+
     // #196: gh with --json/--jq/--template produces structured output that
     // rtk gh would corrupt — skip rewrite so the caller gets raw JSON.
     if rule.rtk_cmd == "rtk gh" {
@@ -2266,5 +2276,37 @@ mod tests {
         assert_eq!(strip_git_global_opts("git --no-pager log"), "git log");
         assert_eq!(strip_git_global_opts("git status"), "git status");
         assert_eq!(strip_git_global_opts("cargo test"), "cargo test");
+    }
+
+    // --- grep -h clap collision (FUZZ-004) ---
+
+    #[test]
+    fn test_rewrite_grep_dash_h_skipped() {
+        // -h (suppress filename) collides with clap's --help short flag
+        assert_eq!(rewrite_command("grep -h pattern file", &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_grep_combined_h_skipped() {
+        // -rh, -hn etc. also contain -h
+        assert_eq!(rewrite_command("grep -rh pattern .", &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_grep_without_h_works() {
+        // -rn doesn't contain -h, should rewrite normally
+        assert_eq!(
+            rewrite_command("grep -rn pattern .", &[]),
+            Some("rtk grep -rn pattern .".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_grep_long_help_not_affected() {
+        // --help is handled by clap anyway, but --no-heading shouldn't trigger the guard
+        assert_eq!(
+            rewrite_command("grep pattern file", &[]),
+            Some("rtk grep pattern file".into())
+        );
     }
 }

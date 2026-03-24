@@ -1,7 +1,9 @@
-use crate::json_cmd;
 use crate::tracking;
 use crate::utils::{resolved_command, truncate};
 use anyhow::{Context, Result};
+
+const MAX_JSON_LINES: usize = 80;
+const MAX_TEXT_LINES: usize = 30;
 
 pub fn run(args: &[String], verbose: u8) -> Result<()> {
     let timer = tracking::TimedExecution::start();
@@ -49,37 +51,39 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
 fn filter_curl_output(output: &str) -> String {
     let trimmed = output.trim();
 
-    // Try JSON detection: starts with { or [
+    // Try JSON detection: pretty-print with value preservation
     if (trimmed.starts_with('{') || trimmed.starts_with('['))
         && (trimmed.ends_with('}') || trimmed.ends_with(']'))
     {
-        if let Ok(schema) = json_cmd::filter_json_string(trimmed, 5) {
-            // Only use schema if it's actually shorter than the original (#297)
-            if schema.len() <= trimmed.len() {
-                return schema;
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Ok(pretty) = serde_json::to_string_pretty(&val) {
+                return truncate_lines(&pretty, MAX_JSON_LINES);
             }
         }
     }
 
     // Not JSON: truncate long output
-    let lines: Vec<&str> = trimmed.lines().collect();
-    if lines.len() > 30 {
-        let mut result: Vec<&str> = lines[..30].to_vec();
-        result.push("");
-        let msg = format!(
-            "... ({} more lines, {} bytes total)",
-            lines.len() - 30,
-            trimmed.len()
-        );
-        return format!("{}\n{}", result.join("\n"), msg);
-    }
+    truncate_lines(trimmed, MAX_TEXT_LINES)
+}
 
-    // Short output: return as-is but truncate long lines
-    lines
-        .iter()
-        .map(|l| truncate(l, 200))
-        .collect::<Vec<_>>()
-        .join("\n")
+/// Truncate output to `max` lines, appending a summary if exceeded.
+fn truncate_lines(text: &str, max: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() <= max {
+        return lines
+            .iter()
+            .map(|l| truncate(l, 200))
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    let mut result: Vec<&str> = lines[..max].to_vec();
+    result.push("");
+    let msg = format!(
+        "... ({} more lines, {} bytes total)",
+        lines.len() - max,
+        text.len()
+    );
+    format!("{}\n{}", result.join("\n"), msg)
 }
 
 #[cfg(test)]
@@ -87,20 +91,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_filter_curl_json() {
-        // Large JSON where schema is shorter than original — schema should be returned
-        let output = r#"{"name": "a very long user name here", "count": 42, "items": [1, 2, 3], "description": "a very long description that takes up many characters in the original JSON payload", "status": "active", "url": "https://example.com/api/v1/users/123"}"#;
+    fn test_filter_curl_json_preserves_values() {
+        let output = r#"{"name": "Alice", "count": 42, "items": [1, 2, 3]}"#;
         let result = filter_curl_output(output);
-        assert!(result.contains("name"));
-        assert!(result.contains("string"));
-        assert!(result.contains("int"));
+        // Values must be preserved (not replaced with type names)
+        assert!(result.contains("Alice"), "actual string value preserved");
+        assert!(result.contains("42"), "actual number value preserved");
+        assert!(!result.contains(": string"), "no schema types");
+        assert!(!result.contains(": int"), "no schema types");
     }
 
     #[test]
-    fn test_filter_curl_json_array() {
-        let output = r#"[{"id": 1}, {"id": 2}]"#;
+    fn test_filter_curl_json_array_preserves_values() {
+        let output = r#"[{"id": 1, "name": "foo"}, {"id": 2, "name": "bar"}]"#;
         let result = filter_curl_output(output);
-        assert!(result.contains("id"));
+        assert!(result.contains("foo"), "array item values preserved");
+        assert!(result.contains("bar"), "array item values preserved");
     }
 
     #[test]
@@ -112,13 +118,12 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_curl_json_small_returns_original() {
-        // Small JSON where schema would be larger than original (issue #297)
+    fn test_filter_curl_json_small_pretty_printed() {
         let output = r#"{"r2Ready":true,"status":"ok"}"#;
         let result = filter_curl_output(output);
-        // Schema would be "{\n  r2Ready: bool,\n  status: string\n}" which is longer
-        // Should return the original JSON unchanged
-        assert_eq!(result.trim(), output.trim());
+        assert!(result.contains("r2Ready"));
+        assert!(result.contains("true"));
+        assert!(result.contains("ok"));
     }
 
     #[test]
@@ -129,5 +134,17 @@ mod tests {
         assert!(result.contains("Line 0"));
         assert!(result.contains("Line 29"));
         assert!(result.contains("more lines"));
+    }
+
+    #[test]
+    fn test_filter_curl_long_json_truncated() {
+        // Build JSON with many lines when pretty-printed
+        let items: Vec<String> = (0..100)
+            .map(|i| format!(r#"{{"id": {}, "name": "item_{}"}}"#, i, i))
+            .collect();
+        let output = format!("[{}]", items.join(","));
+        let result = filter_curl_output(&output);
+        assert!(result.contains("item_0"), "first items preserved");
+        assert!(result.contains("more lines"), "long JSON truncated");
     }
 }
