@@ -3,7 +3,7 @@
   "name": "RTK Token Optimizer",
   "version": "1.0.0",
   "description": "Transparently rewrites shell commands to their RTK equivalents for 60-90% LLM token savings",
-  "homepage": "https://github.com/rtk-ai/rtk",
+  "homepage": "https://github.com/algolia/rtk",
   "license": "MIT",
   "configSchema": {
     "type": "object",

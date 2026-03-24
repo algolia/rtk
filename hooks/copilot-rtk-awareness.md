@@ -29,7 +29,7 @@ which rtk       # Verify correct binary path
 ```
 
 > ⚠️ **Name collision**: If `rtk gain` fails, you may have `reachingforthejack/rtk`
-> (Rust Type Kit) installed instead. Check `which rtk` and reinstall from rtk-ai/rtk.
+> (Rust Type Kit) installed instead. Check `which rtk` and reinstall from algolia/rtk.
 
 ## How the hook works
 
