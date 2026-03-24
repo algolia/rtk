@@ -39,9 +39,13 @@ case "$FIRST_CMD" in
   rtk\ *|*/rtk\ *) _rtk_audit_log "skip:already_rtk" "$CMD"; exit 0 ;;
 esac
 
-# Skip commands with heredocs, variable assignments as the whole command, etc.
+# Skip commands with heredocs, subshell assignments, or process substitution.
+# Subshell assignments like VAR=$(grep ...) confuse the ENV_PREFIX regex
+# which misparsed "APP_ID=$(grep " as an env prefix, mangling the rewrite.
 case "$FIRST_CMD" in
   *'<<'*) _rtk_audit_log "skip:heredoc" "$CMD"; exit 0 ;;
+  *'=$('*) _rtk_audit_log "skip:subshell_assignment" "$CMD"; exit 0 ;;
+  *'=`'*) _rtk_audit_log "skip:backtick_assignment" "$CMD"; exit 0 ;;
 esac
 
 # Strip leading env var assignments for pattern matching
