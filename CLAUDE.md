@@ -411,6 +411,22 @@ git push --force-with-lease origin HEAD:main
 **Key principle**: Upstream is authoritative. We stay as thin as possible.
 Always check upstream for fixes before writing our own (see feedback memory).
 
+### Versioning Scheme
+
+Format: `<upstream-version>.algolia.<N>`
+
+- `N` starts at `1` on each upstream catchup (realignment)
+- `N` increments for each fork-specific bug fix
+- On next upstream catchup, reset to `<new-upstream-version>.algolia.1`
+
+**Examples**:
+- Upstream at `0.33.0-rc.54` → fork ships `0.33.0-rc.54.algolia.1`
+- Bug fix on same base → `0.33.0-rc.54.algolia.2`
+- Upstream moves to `0.35.0` → catchup, fork ships `0.35.0.algolia.1`
+
+**In Cargo.toml**: use the full version string (valid semver pre-release).
+**Git tags**: `v0.33.0-rc.54.algolia.1` etc.
+
 ## Testing Strategy
 
 ### TDD Workflow (mandatory)
