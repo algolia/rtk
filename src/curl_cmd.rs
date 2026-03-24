@@ -1,4 +1,3 @@
-use crate::json_cmd;
 use crate::tracking;
 use crate::utils::truncate;
 use anyhow::{Context, Result};
@@ -47,37 +46,49 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     Ok(())
 }
 
+/// Max lines of pretty-printed JSON to show before truncating.
+const MAX_JSON_LINES: usize = 80;
+/// Max lines for non-JSON output.
+const MAX_TEXT_LINES: usize = 30;
+
 fn filter_curl_output(output: &str) -> String {
     let trimmed = output.trim();
 
-    // Try JSON detection: starts with { or [
+    // Try JSON detection: pretty-print with actual values preserved.
+    // Previous behaviour replaced values with types (schema mode) which
+    // destroyed data needed for API debugging.
     if (trimmed.starts_with('{') || trimmed.starts_with('['))
         && (trimmed.ends_with('}') || trimmed.ends_with(']'))
     {
-        if let Ok(schema) = json_cmd::filter_json_string(trimmed, 5) {
-            return schema;
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            let pretty = serde_json::to_string_pretty(&parsed).unwrap_or_default();
+            return truncate_lines(&pretty, MAX_JSON_LINES);
         }
     }
 
     // Not JSON: truncate long output
-    let lines: Vec<&str> = trimmed.lines().collect();
-    if lines.len() > 30 {
-        let mut result: Vec<&str> = lines[..30].to_vec();
-        result.push("");
-        let msg = format!(
-            "... ({} more lines, {} bytes total)",
-            lines.len() - 30,
-            trimmed.len()
-        );
-        return format!("{}\n{}", result.join("\n"), msg);
-    }
+    truncate_lines(trimmed, MAX_TEXT_LINES)
+}
 
-    // Short output: return as-is but truncate long lines
-    lines
-        .iter()
-        .map(|l| truncate(l, 200))
-        .collect::<Vec<_>>()
-        .join("\n")
+/// Keep at most `max` lines, appending a summary when truncated.
+/// Long individual lines are capped at 200 chars.
+fn truncate_lines(text: &str, max: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() > max {
+        let kept: Vec<String> = lines[..max].iter().map(|l| truncate(l, 200)).collect();
+        format!(
+            "{}\n\n... ({} more lines, {} bytes total)",
+            kept.join("\n"),
+            lines.len() - max,
+            text.len()
+        )
+    } else {
+        lines
+            .iter()
+            .map(|l| truncate(l, 200))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 }
 
 #[cfg(test)]
@@ -85,19 +96,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_filter_curl_json() {
+    fn test_filter_curl_json_preserves_values() {
         let output = r#"{"name": "test", "count": 42, "items": [1, 2, 3]}"#;
         let result = filter_curl_output(output);
-        assert!(result.contains("name"));
-        assert!(result.contains("string"));
-        assert!(result.contains("int"));
+        // Must preserve actual values — not replace with types
+        assert!(result.contains("\"test\""), "should keep string value");
+        assert!(result.contains("42"), "should keep numeric value");
+        assert!(result.contains("name"), "should keep key name");
+        assert!(!result.contains(": string"), "must NOT schema-ify values");
+        assert!(!result.contains(": int"), "must NOT schema-ify values");
     }
 
     #[test]
-    fn test_filter_curl_json_array() {
-        let output = r#"[{"id": 1}, {"id": 2}]"#;
+    fn test_filter_curl_json_array_preserves_values() {
+        let output = r#"[{"id": 1, "title": "hello"}, {"id": 2, "title": "world"}]"#;
         let result = filter_curl_output(output);
-        assert!(result.contains("id"));
+        assert!(result.contains("\"hello\""), "should keep string values");
+        assert!(result.contains("2"), "should keep numeric values");
+    }
+
+    #[test]
+    fn test_filter_curl_json_pretty_prints() {
+        let output = r#"{"a":1,"b":"two"}"#;
+        let result = filter_curl_output(output);
+        // Pretty-printed should have newlines
+        assert!(result.contains('\n'), "should be multi-line");
+        assert!(result.contains("\"a\""), "should keep key");
+        assert!(result.contains("\"two\""), "should keep value");
     }
 
     #[test]
@@ -116,5 +141,21 @@ mod tests {
         assert!(result.contains("Line 0"));
         assert!(result.contains("Line 29"));
         assert!(result.contains("more lines"));
+    }
+
+    #[test]
+    fn test_filter_curl_large_json_truncated() {
+        // Build a JSON object with many keys to exceed MAX_JSON_LINES
+        let mut obj = serde_json::Map::new();
+        for i in 0..200 {
+            obj.insert(
+                format!("key_{}", i),
+                serde_json::Value::String(format!("value_{}", i)),
+            );
+        }
+        let output = serde_json::to_string(&obj).unwrap();
+        let result = filter_curl_output(&output);
+        assert!(result.contains("more lines"), "should truncate large JSON");
+        assert!(result.contains("key_0"), "should keep early keys");
     }
 }
