@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
 use super::integrity;
-use crate::core::config;
 
 // Embedded hook script (guards before set -euo pipefail)
 const REWRITE_HOOK: &str = include_str!("../../hooks/claude/rtk-rewrite.sh");
@@ -25,7 +24,7 @@ const RTK_SLIM_CODEX: &str = include_str!("../../hooks/codex/rtk-awareness.md");
 /// Template written by `rtk init` when no filters.toml exists yet.
 const FILTERS_TEMPLATE: &str = r#"# Project-local RTK filters — commit this file with your repo.
 # Filters here override user-global and built-in filters.
-# Docs: https://github.com/rtk-ai/rtk#custom-filters
+# Docs: https://github.com/algolia/rtk#custom-filters
 schema_version = 1
 
 # Example: suppress build noise from a custom tool
@@ -41,7 +40,7 @@ schema_version = 1
 /// Template for user-global filters (~/.config/rtk/filters.toml).
 const FILTERS_GLOBAL_TEMPLATE: &str = r#"# User-global RTK filters — apply to all your projects.
 # Project-local .rtk/filters.toml takes precedence over these.
-# Docs: https://github.com/rtk-ai/rtk#custom-filters
+# Docs: https://github.com/algolia/rtk#custom-filters
 schema_version = 1
 
 # Example: suppress noise from a tool you use everywhere
@@ -281,16 +280,6 @@ pub fn run(
     if install_cursor {
         install_cursor_hooks(verbose)?;
     }
-
-    println!();
-    let env_disabled = std::env::var("RTK_TELEMETRY_DISABLED").unwrap_or_default() == "1";
-    let config_disabled = matches!(config::telemetry_enabled(), Some(false));
-    if env_disabled || config_disabled {
-        println!("  [info] Anonymous telemetry is disabled");
-    } else {
-        println!("  [info] Anonymous telemetry is enabled by default (opt-out: RTK_TELEMETRY_DISABLED=1)");
-    }
-    println!("  [info] See: https://github.com/rtk-ai/rtk#privacy--telemetry");
 
     Ok(())
 }
@@ -2202,7 +2191,7 @@ fn patch_gemini_settings(
     if patch_mode == PatchMode::Skip {
         println!(
             "\nManual setup needed: add RTK hook to {}\n\
-             See: https://github.com/rtk-ai/rtk#gemini-cli",
+             See: https://github.com/algolia/rtk#gemini-cli",
             settings_path.display()
         );
         return Ok(());

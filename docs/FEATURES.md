@@ -1321,9 +1321,6 @@ mode = "failures"           # "failures" (defaut), "always", ou "never"
 max_files = 20              # Rotation : garder les N derniers fichiers
 # directory = "/custom/tee/path"  # Chemin personnalise (optionnel)
 
-[telemetry]
-enabled = true              # Telemetrie anonyme (1 ping/jour, opt-out possible)
-
 [hooks]
 exclude_commands = []       # Commandes a exclure de la recriture automatique
 ```
@@ -1366,26 +1363,6 @@ FAILED: 2/15 tests
 | `tee.max_files` | `20` | Rotation : garder les N derniers |
 | Taille min | 500 octets | Les sorties trop courtes ne sont pas sauvegardees |
 | Taille max fichier | 1 Mo | Troncature au-dela |
-
----
-
-## Telemetrie
-
-RTK envoie un ping anonyme une fois par jour (23h d'intervalle) pour des statistiques d'utilisation.
-
-**Donnees envoyees :** hash de device, version, OS, architecture, nombre de commandes/24h, top commandes, pourcentage d'economies.
-
-**Desactiver :**
-```bash
-# Via variable d'environnement
-export RTK_TELEMETRY_DISABLED=1
-
-# Via config.toml
-[telemetry]
-enabled = false
-```
-
-Aucune donnee personnelle, aucun contenu de commande, aucun chemin de fichier n'est transmis.
 
 ---
 

@@ -12,7 +12,7 @@ rtk: 'gain' is not a rtk command. See 'rtk --help'.
 ```
 
 ### Root Cause
-You installed the **wrong rtk package**. You have **Rust Type Kit** (reachingforthejack/rtk) instead of **Rust Token Killer** (rtk-ai/rtk).
+You installed the **wrong rtk package**. You have **Rust Type Kit** (reachingforthejack/rtk) instead of **Rust Token Killer** (algolia/rtk).
 
 ### Solution
 
@@ -25,12 +25,12 @@ cargo uninstall rtk
 
 #### Quick Install (Linux/macOS)
 ```bash
-curl -fsSL https://github.com/rtk-ai/rtk/blob/master/install.sh | sh
+curl -fsSL https://github.com/algolia/rtk/blob/master/install.sh | sh
 ```
 
 #### Alternative: Manual Installation
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 **3. Verify installation:**
@@ -49,7 +49,7 @@ If `rtk gain` now works, installation is correct.
 
 | Project | Repository | Purpose | Key Command |
 |---------|-----------|---------|-------------|
-| **Rust Token Killer** ✅ | rtk-ai/rtk | LLM token optimizer for Claude Code | `rtk gain` |
+| **Rust Token Killer** ✅ | algolia/rtk | LLM token optimizer for Claude Code | `rtk gain` |
 | **Rust Type Kit** ❌ | reachingforthejack/rtk | Rust codebase query and type generator | `rtk query` |
 
 ### How to Identify Which One You Have
@@ -76,10 +76,10 @@ If **Rust Type Kit** is published to crates.io under the name `rtk`, running `ca
 
 ```bash
 # CORRECT - Token Killer
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 
 # OR install from fork
-git clone https://github.com/rtk-ai/rtk.git
+git clone https://github.com/algolia/rtk.git
 cd rtk && git checkout feat/all-features
 cargo install --path . --force
 ```
@@ -219,7 +219,7 @@ On Windows, Node.js tools (vitest, eslint, tsc, etc.) are installed as `.CMD` or
 Update to rtk v0.23.1+ which resolves this via the `which` crate for proper PATH+PATHEXT resolution. All 16+ command modules now use `resolved_command()` instead of `Command::new()`.
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 rtk --version  # Should be 0.23.1+
 ```
 
@@ -311,15 +311,15 @@ rustc --version  # Should be 1.70+ for most features
 ```
 
 **4. If still fails, report issue:**
-- GitHub: https://github.com/rtk-ai/rtk/issues
+- GitHub: https://github.com/algolia/rtk/issues
 
 ---
 
 ## Need More Help?
 
 **Report issues:**
-- Fork-specific: https://github.com/rtk-ai/rtk/issues
-- Upstream: https://github.com/rtk-ai/rtk/issues
+- Fork-specific: https://github.com/algolia/rtk/issues
+- Upstream: https://github.com/algolia/rtk/issues
 
 **Run the diagnostic script:**
 ```bash

@@ -372,6 +372,13 @@ pub fn rewrite_command(cmd: &str, excluded: &[String]) -> Option<String> {
         return None;
     }
 
+    // Shell function definitions — rewriting commands inside function bodies
+    // produces invalid references when the function is later called.
+    // Detect patterns like `name() {`, `function name {`, `name ()`.
+    if trimmed.contains("() {") || trimmed.contains("() \n") || trimmed.starts_with("function ") {
+        return None;
+    }
+
     // Simple (non-compound) already-RTK command — return as-is.
     // For compound commands that start with "rtk" (e.g. "rtk git add . && cargo test"),
     // fall through to rewrite_compound so the remaining segments get rewritten.
@@ -428,13 +435,18 @@ fn rewrite_compound(cmd: &str, excluded: &[String]) -> Option<String> {
                 } else {
                     // `|` pipe — rewrite first segment only, pass through the rest unchanged
                     let seg = cmd[seg_start..i].trim();
-                    // Skip rewriting `find`/`fd` in pipes — rtk find outputs a grouped
-                    // format that is incompatible with pipe consumers like xargs, grep,
-                    // wc, sort, etc. which expect one path per line (#439).
+                    // Skip rewriting commands whose RTK filters transform output format,
+                    // making them incompatible with pipe consumers:
+                    // - find/fd: grouped format vs one-path-per-line (#439)
+                    // - curl/wget: JSON schema compression breaks downstream parsers
                     let is_pipe_incompatible = seg.starts_with("find ")
                         || seg == "find"
                         || seg.starts_with("fd ")
-                        || seg == "fd";
+                        || seg == "fd"
+                        || seg.starts_with("curl ")
+                        || seg == "curl"
+                        || seg.starts_with("wget ")
+                        || seg == "wget";
                     let rewritten = if is_pipe_incompatible {
                         seg.to_string()
                     } else {
@@ -618,8 +630,8 @@ fn rewrite_segment(seg: &str, excluded: &[String]) -> Option<String> {
     // Most cat flags (-v, -A, -e, -t, -s, -b, --show-all, etc.) have different
     // semantics than rtk read or no equivalent at all. Only `-n` (line numbers)
     // maps correctly to `rtk read -n`. Skip rewrite for any other flag.
-    if cmd_part.starts_with("cat ") {
-        let args = cmd_part["cat ".len()..].trim_start();
+    if let Some(rest) = cmd_part.strip_prefix("cat ") {
+        let args = rest.trim_start();
         if args.starts_with('-') && !args.starts_with("-n ") && !args.starts_with("-n\t") {
             return None;
         }
@@ -2422,6 +2434,76 @@ mod tests {
         assert_eq!(
             rewrite_command("wc src/*.rs", &[]),
             Some("rtk wc src/*.rs".into())
+        );
+    }
+
+    // --- Shell function definitions must not be rewritten ---
+
+    #[test]
+    fn test_rewrite_skip_shell_function_definition() {
+        // Single-line function with curl inside
+        assert_eq!(
+            rewrite_command("create_link() { curl -s https://api.example.com; }", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_multiline_function_definition() {
+        // Multiline function definition (as Claude Code would send it)
+        let cmd = "create_link() {\n  curl -s https://api.example.com\n}";
+        assert_eq!(rewrite_command(cmd, &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_keyword() {
+        assert_eq!(
+            rewrite_command("function fetch_data { curl -s https://example.com; }", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_with_invocation() {
+        // Function definition followed by invocation
+        let cmd = r#"create_link() { curl -s "https://api.short.io/links" | python3 -c "import sys,json; print(json.load(sys.stdin))"; }; create_link "https://example.com""#;
+        assert_eq!(rewrite_command(cmd, &[]), None);
+    }
+
+    // --- Pipe-incompatible commands: curl/wget must not be rewritten when piped ---
+
+    #[test]
+    fn test_rewrite_curl_pipe_skipped() {
+        // curl piped to jq/python should NOT be rewritten (output format changes)
+        assert_eq!(
+            rewrite_command("curl -s https://api.example.com | jq .name", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_no_pipe_still_rewritten() {
+        // curl without pipe should still be rewritten
+        assert_eq!(
+            rewrite_command("curl -s https://api.example.com", &[]),
+            Some("rtk curl -s https://api.example.com".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_wget_pipe_skipped() {
+        assert_eq!(
+            rewrite_command("wget -qO- https://example.com | grep title", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_compound_and_pipe() {
+        // curl in && chain: rewrite. curl before pipe: don't rewrite.
+        assert_eq!(
+            rewrite_command("git status && curl -s https://api.example.com | jq .", &[]),
+            Some("rtk git status && curl -s https://api.example.com | jq .".into())
         );
     }
 }

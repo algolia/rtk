@@ -181,7 +181,7 @@ Savings by ecosystem:
 ### Module Breakdown
 
 - **Command Modules**: `src/cmds/` — organized by ecosystem (git, rust, js, python, go, dotnet, cloud, system, ruby). Each ecosystem README lists its files.
-- **Core Infrastructure**: `src/core/` — utils, filter, tracking, tee, config, toml_filter, display_helpers, telemetry
+- **Core Infrastructure**: `src/core/` — utils, filter, tracking, tee, config, toml_filter, display_helpers
 - **Hook System**: `src/hooks/` — init, rewrite, permissions, hook_cmd, hook_check, hook_audit, verify, trust, integrity
 - **Analytics**: `src/analytics/` — gain, cc_economics, ccusage, session_cmd
 
