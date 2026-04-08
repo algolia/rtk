@@ -11,11 +11,9 @@
   <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord" alt="Discord"></a>
-  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">Website</a> &bull;
   <a href="#installation">Install</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">Troubleshooting</a> &bull;
   <a href="ARCHITECTURE.md">Architecture</a> &bull;
@@ -57,13 +55,7 @@ rtk filters and compresses command outputs before they reach your LLM context. S
 
 ## Installation
 
-### Homebrew (recommended)
-
-```bash
-brew install rtk
-```
-
-### Quick Install (Linux/macOS)
+### Quick Install (Linux/macOS, recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
@@ -90,7 +82,7 @@ Download from [releases](https://github.com/algolia/rtk/releases):
 ### Verify Installation
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+rtk --version   # Should show "rtk 0.34.x-algolia.y"
 rtk gain        # Should show token savings stats
 ```
 
@@ -459,7 +451,6 @@ FAILED: 2/15 tests
 ```bash
 rtk init -g --uninstall     # Remove hook, RTK.md, settings.json entry
 cargo uninstall rtk          # Remove binary
-brew uninstall rtk           # If installed via Homebrew
 ```
 
 ## Documentation

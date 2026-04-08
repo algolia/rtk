@@ -264,7 +264,6 @@ rtk init -g --uninstall
 cargo uninstall rtk
 
 # If installed via package manager
-brew uninstall rtk          # macOS Homebrew
 sudo apt remove rtk         # Debian/Ubuntu
 sudo dnf remove rtk         # Fedora/RHEL
 ```
@@ -369,8 +368,7 @@ cargo install --path . --force
 
 ## Support and Contributing
 
-- **Website**: https://www.rtk-ai.app
-- **Contact**: contact@rtk-ai.app
+- **Slack**: [#proj-internal-skills](https://algolia-grid.enterprise.slack.com/archives/C0AP6Q1D41X)
 - **Troubleshooting**: See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues
 - **GitHub issues**: https://github.com/algolia/rtk/issues
 - **Pull Requests**: https://github.com/algolia/rtk/pulls

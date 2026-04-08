@@ -16,7 +16,7 @@ This is a fork with critical fixes for git argument parsing and modern JavaScrip
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.28.2" (or newer)
+rtk --version  # Should show "rtk 0.34.x-algolia.y" (or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 
@@ -157,6 +157,41 @@ git branch  # Verify correct branch (main, feature/*, etc.)
 - "Should I research X external API behavior?" → ASK if it requires >3 commands
 - "Should I test Y edge case?" → ASK if not mentioned in requirements
 - "Should I verify Z across N platforms?" → ASK if N > 2
+
+## Fork Hygiene (Mandatory)
+
+This is the **Algolia fork** (`algolia/rtk`), not the upstream (`rtk-ai/rtk`). Upstream references leak in during rebases and releases. **Every rebase and every release MUST include a fork hygiene check.**
+
+### Pre-commit Checklist (after rebase or before release)
+
+Run this grep to catch upstream leaks:
+
+```bash
+rg -i 'brew install rtk[^-]|rtk-ai\.app|contact@rtk|"rtk 0\.\d+\.\d+"' --glob '*.md' --glob '*.rb'
+```
+
+**Zero matches required.** Any hit must be fixed before commit.
+
+### Banned Patterns in User-Facing Docs
+
+| Pattern | Why | Replace With |
+|---------|-----|--------------|
+| `brew install rtk` | No Homebrew tap for fork | `cargo install --git https://github.com/algolia/rtk` or `curl \| sh` |
+| `https://www.rtk-ai.app` | Upstream website | Remove or use `https://github.com/algolia/rtk` |
+| `contact@rtk-ai.app` | Upstream email | `#proj-internal-skills` on Slack |
+| `rtk-ai/rtk` in install instructions | Upstream repo | `algolia/rtk` |
+| `brew uninstall rtk` | No Homebrew install exists | `cargo uninstall rtk` |
+| Hardcoded version strings (`"rtk 0.28.2"`) | Goes stale on every release | Use current `Cargo.toml` version |
+
+### Where to Check
+
+All `README*.md`, `INSTALL.md`, `CLAUDE.md`, `openclaw/README.md`, `Formula/rtk.rb`, GitHub repo metadata (`gh repo edit --homepage`).
+
+### On Release
+
+1. Run the grep above — fix any matches
+2. Update version strings in docs to match `Cargo.toml`
+3. Verify `gh repo view --json homepageUrl` returns empty (not upstream URL)
 
 ## Plan Execution Protocol
 

@@ -11,11 +11,9 @@
   <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1478373640461488159?label=Discord&logo=discord" alt="Discord"></a>
-  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">웹사이트</a> &bull;
   <a href="#설치">설치</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">문제 해결</a> &bull;
   <a href="ARCHITECTURE.md">아키텍처</a> &bull;
@@ -48,13 +46,7 @@ rtk는 명령 출력이 LLM 컨텍스트에 도달하기 전에 필터링하고 
 
 ## 설치
 
-### Homebrew (권장)
-
-```bash
-brew install rtk
-```
-
-### 빠른 설치 (Linux/macOS)
+### 빠른 설치 (Linux/macOS, 권장)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
@@ -69,7 +61,7 @@ cargo install --git https://github.com/algolia/rtk
 ### 확인
 
 ```bash
-rtk --version   # "rtk 0.27.x" 표시되어야 함
+rtk --version   # "rtk 0.34.x-algolia.y" 표시되어야 함
 rtk gain        # 토큰 절약 통계 표시되어야 함
 ```
 

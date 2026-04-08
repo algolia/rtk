@@ -11,11 +11,9 @@
   <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1478373640461488159?label=Discord&logo=discord" alt="Discord"></a>
-  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">Sitio web</a> &bull;
   <a href="#instalacion">Instalar</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">Solucion de problemas</a> &bull;
   <a href="ARCHITECTURE.md">Arquitectura</a> &bull;
@@ -48,13 +46,7 @@ rtk filtra y comprime las salidas de comandos antes de que lleguen al contexto d
 
 ## Instalacion
 
-### Homebrew (recomendado)
-
-```bash
-brew install rtk
-```
-
-### Instalacion rapida (Linux/macOS)
+### Instalacion rapida (Linux/macOS, recomendado)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
@@ -69,7 +61,7 @@ cargo install --git https://github.com/algolia/rtk
 ### Verificacion
 
 ```bash
-rtk --version   # Debe mostrar "rtk 0.27.x"
+rtk --version   # Debe mostrar "rtk 0.34.x-algolia.y"
 rtk gain        # Debe mostrar estadisticas de ahorro
 ```
 
