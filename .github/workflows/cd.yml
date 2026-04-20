@@ -3,7 +3,7 @@ name: CD
 on:
   workflow_dispatch:
   push:
-    branches: [develop, master]
+    branches: [main, develop, master]
 
 concurrency:
   group: cd-${{ github.ref }}
@@ -21,7 +21,7 @@ jobs:
   pre-release:
     if: >-
       github.ref == 'refs/heads/develop'
-      || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master')
+      || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main')
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
@@ -98,7 +98,7 @@ jobs:
   # ═══════════════════════════════════════════════
 
   release-please:
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
