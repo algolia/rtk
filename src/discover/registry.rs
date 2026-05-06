@@ -502,10 +502,16 @@ fn rewrite_compound(cmd: &str, excluded: &[ExcludePattern]) -> Option<String> {
             }
             TokenKind::Pipe => {
                 let seg = cmd[seg_start..tok.offset].trim();
+                // curl/wget piped to jq/python/grep produces JSON or HTML that
+                // downstream consumers parse — rtk filtering would break them.
                 let is_pipe_incompatible = seg.starts_with("find ")
                     || seg == "find"
                     || seg.starts_with("fd ")
-                    || seg == "fd";
+                    || seg == "fd"
+                    || seg.starts_with("curl ")
+                    || seg == "curl"
+                    || seg.starts_with("wget ")
+                    || seg == "wget";
                 let rewritten = if is_pipe_incompatible {
                     seg.to_string()
                 } else {
@@ -3447,6 +3453,41 @@ mod tests {
         assert_eq!(
             rewrite_command("git log | head | tail && git status", &[]),
             Some("rtk git log | head | tail && rtk git status".into())
+        );
+    }
+
+    // Pipe-incompatible commands: curl/wget must not be rewritten when piped
+
+    #[test]
+    fn test_rewrite_curl_pipe_skipped() {
+        assert_eq!(
+            rewrite_command("curl -s https://api.example.com | jq .name", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_no_pipe_still_rewritten() {
+        assert_eq!(
+            rewrite_command("curl -s https://api.example.com", &[]),
+            Some("rtk curl -s https://api.example.com".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_wget_pipe_skipped() {
+        assert_eq!(
+            rewrite_command("wget -qO- https://example.com | grep title", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_compound_and_pipe() {
+        // curl in && chain: rewrite. curl before pipe: don't rewrite.
+        assert_eq!(
+            rewrite_command("git status && curl -s https://api.example.com | jq .", &[]),
+            Some("rtk git status && curl -s https://api.example.com | jq .".into())
         );
     }
 }
