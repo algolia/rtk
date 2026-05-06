@@ -160,6 +160,124 @@ git branch  # Verify correct branch (main, feature/*, etc.)
 - "Should I test Y edge case?" → ASK if not mentioned in requirements
 - "Should I verify Z across N platforms?" → ASK if N > 2
 
+## Fork Policy (algolia/rtk)
+
+This repository is a **fork** of [rtk-ai/rtk](https://github.com/rtk-ai/rtk).
+The fork stays as thin as possible: upstream is authoritative, we add the
+minimum needed for Algolia.
+
+### What we change from upstream
+- **Telemetry stripped**: no phone-home, no `ureq` / `hostname` deps,
+  no opt-out config, no `RTK_TELEMETRY_*` env vars
+- **No Homebrew tap**: install via `cargo install --git` or `install.sh`
+- **Branding**: all install URLs and repo references point to `algolia/rtk`
+- **Targeted bug fixes**: only when upstream hasn't addressed the issue.
+  Each lives under `bug-reports/` with a reproducer.
+
+### What we DON'T change
+- All upstream features, filters, commands, TOML DSL, rewrite engine
+- Test suite (must pass)
+- Architecture and module structure
+
+### Upstream Catchup Procedure (re-fork strategy)
+
+When upstream has new releases to absorb, **do not merge** — re-fork.
+Merging accumulates conflict-resolution noise and can silently re-apply
+patches that upstream has fixed. The re-fork procedure forces patch
+re-validation at every catchup:
+
+```bash
+# 1. Fetch upstream
+git remote add upstream https://github.com/rtk-ai/rtk.git  # one-time
+git fetch upstream
+
+# 2. Branch off upstream/master directly
+git checkout -b fork/upstream-realign-vX.Y.Z upstream/master
+
+# 3. Strip telemetry (always required)
+#    - Delete src/core/telemetry.rs, src/core/telemetry_cmd.rs
+#    - Remove `pub mod telemetry;` and `pub mod telemetry_cmd;` from
+#      src/core/mod.rs
+#    - Remove `core::telemetry::maybe_ping();` from main.rs
+#    - Remove the `Telemetry` Commands enum variant + match arm in main.rs
+#    - Remove TelemetryConfig + tests from src/core/config.rs
+#    - Remove prompt_telemetry_consent / save_telemetry_consent from
+#      src/hooks/init.rs and the call site
+#    - Remove `ureq` (and `hostname` if present) from Cargo.toml
+#    - Remove RTK_TELEMETRY_URL/TOKEN env vars from .github/workflows/release.yml
+#    - Delete docs/TELEMETRY.md, docs/guide/resources/telemetry.md
+#    - Strip Privacy & Telemetry sections from README*.md and other docs
+
+# 4. Fork hygiene rebrand (see below)
+#    sed-based rewrite of rtk-ai/rtk → algolia/rtk in install instructions,
+#    rtk-ai.app links, master → main where appropriate
+
+# 5. Re-test bug-reports/*.md against the new base.
+#    Upstream fixes most issues over time — re-apply ONLY patches still
+#    needed. Each preserved patch should reference its bug-report file
+#    in the commit message.
+
+# 6. Bump version in Cargo.toml: 0.X.Y → 0.X.Y-algolia.1
+#    Also update .release-please-manifest.json
+
+# 7. Build + test
+cargo fmt --all && cargo clippy --all-targets && cargo test --all
+
+# 8. Open a PR from fork/upstream-realign-vX.Y.Z against main.
+#    The PR diff against main is large (300+ commits absorbed), but the
+#    diff against upstream/master is small (telemetry strip + 2-3
+#    targeted patches + rebrand). Reviewers should review it the second
+#    way: `git diff upstream/master..fork/upstream-realign-vX.Y.Z`.
+
+# 9. Once approved, the merge replaces main. Force-push if your team's
+#    convention requires linear history; merge commit if not.
+```
+
+**Key principle**: every catchup re-validates every patch. Patches that
+upstream silently fixed get dropped automatically because the re-fork
+starts from a clean upstream tree.
+
+## Fork Hygiene (Mandatory)
+
+This is the **Algolia fork** (`algolia/rtk`), not the upstream (`rtk-ai/rtk`).
+Upstream references leak in during rebases and releases. **Every rebase
+and every release MUST include a fork hygiene check.**
+
+### Pre-commit Checklist (after rebase or before release)
+
+Run this grep to catch upstream leaks:
+
+```bash
+rg -i 'brew install rtk[^-]|rtk-ai\.app|contact@rtk|"rtk 0\.\d+\.\d+"' --glob '*.md' --glob '*.rb'
+```
+
+**Zero matches required.** Any hit must be fixed before commit. Historical
+references in `CHANGELOG.md` (auto-generated from upstream commits) are
+the one exception.
+
+### Banned Patterns in User-Facing Docs
+
+| Pattern | Why | Replace With |
+|---------|-----|--------------|
+| `brew install rtk` | No Homebrew tap for fork | `cargo install --git https://github.com/algolia/rtk` or `curl \| sh` |
+| `https://www.rtk-ai.app` | Upstream website | Remove or use `https://github.com/algolia/rtk` |
+| `contact@rtk-ai.app` | Upstream email | `#proj-internal-skills` on Slack |
+| `rtk-ai/rtk` in install instructions | Upstream repo | `algolia/rtk` |
+| `brew uninstall rtk` | No Homebrew install exists | `cargo uninstall rtk` |
+| Hardcoded version strings (`"rtk 0.28.2"`) | Goes stale on every release | Use current `Cargo.toml` version |
+
+### Where to Check
+
+All `README*.md`, `INSTALL.md`, `CLAUDE.md`, `openclaw/README.md`,
+`Formula/rtk.rb`, GitHub repo metadata (`gh repo edit --homepage`).
+
+### On Release
+
+1. Run the grep above — fix any matches
+2. Update version strings in docs to match `Cargo.toml`
+3. Verify `gh repo view --json homepageUrl` returns the algolia URL
+   (not upstream)
+
 ## Plan Execution Protocol
 
 When user provides a numbered plan (QW1-QW4, Phase 1-5, sprint tasks, etc.):
