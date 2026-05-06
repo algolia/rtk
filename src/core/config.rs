@@ -202,5 +202,4 @@ history_days = 90
         let config: Config = toml::from_str(toml).expect("valid toml");
         assert!(config.hooks.exclude_commands.is_empty());
     }
-
 }
