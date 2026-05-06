@@ -448,6 +448,13 @@ pub fn rewrite_command(cmd: &str, excluded: &[String]) -> Option<String> {
         return None;
     }
 
+    // Shell function definitions: rewriting commands inside function bodies
+    // produces invalid references when the function is later called.
+    // Detect patterns like `name() {`, `function name {`, `name ()`.
+    if trimmed.contains("() {") || trimmed.contains("() \n") || trimmed.starts_with("function ") {
+        return None;
+    }
+
     let compiled = compile_exclude_patterns(excluded);
 
     // Simple (non-compound) already-RTK command — return as-is.
@@ -3457,6 +3464,36 @@ mod tests {
     }
 
     // Pipe-incompatible commands: curl/wget must not be rewritten when piped
+
+    // Shell function definitions must not be rewritten
+
+    #[test]
+    fn test_rewrite_skip_shell_function_definition() {
+        assert_eq!(
+            rewrite_command("create_link() { curl -s https://api.example.com; }", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_multiline_function_definition() {
+        let cmd = "create_link() {\n  curl -s https://api.example.com\n}";
+        assert_eq!(rewrite_command(cmd, &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_keyword() {
+        assert_eq!(
+            rewrite_command("function fetch_data { curl -s https://example.com; }", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_with_invocation() {
+        let cmd = r#"create_link() { curl -s "https://api.short.io/links" | python3 -c "import sys,json; print(json.load(sys.stdin))"; }; create_link "https://example.com""#;
+        assert_eq!(rewrite_command(cmd, &[]), None);
+    }
 
     #[test]
     fn test_rewrite_curl_pipe_skipped() {
