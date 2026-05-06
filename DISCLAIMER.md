@@ -20,10 +20,6 @@ This software incorporates third-party open-source components, each governed by 
 
 This software interacts with your development environment, file system, and external commands. It is your responsibility to ensure that its use is appropriate for your environment and complies with any applicable policies, regulations, or agreements. The authors are not responsible for any unintended side effects resulting from its use.
 
-## Telemetry
-
-This software collects anonymous, aggregate usage metrics by default and can be disabled at any time. No personally identifiable information, source code, file paths, command arguments, or secrets are collected. See the README for full details and opt-out instructions.
-
 ---
 
 See [LICENSE](LICENSE) for the full terms of the Apache License 2.0 under which this software is distributed.

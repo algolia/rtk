@@ -213,11 +213,10 @@ Key design decisions:
 
 Once the rewritten command reaches RTK:
 
-1. **Telemetry**: `telemetry::maybe_ping()` fires a non-blocking daily usage ping
-2. **Clap parsing**: `Cli::try_parse()` matches against the `Commands` enum
-3. **Hook check**: `hook_check::maybe_warn()` warns if the installed hook is outdated (rate-limited to 1/day)
-4. **Integrity check**: `integrity::runtime_check()` verifies the hook's SHA-256 hash for operational commands
-5. **Routing**: A `match cli.command` dispatches to the specialized filter module
+1. **Clap parsing**: `Cli::try_parse()` matches against the `Commands` enum
+2. **Hook check**: `hook_check::maybe_warn()` warns if the installed hook is outdated (rate-limited to 1/day)
+3. **Integrity check**: `integrity::runtime_check()` verifies the hook's SHA-256 hash for operational commands
+4. **Routing**: A `match cli.command` dispatches to the specialized filter module
 
 If Clap parsing fails (command not in the enum), the fallback path runs instead.
 

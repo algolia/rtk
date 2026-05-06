@@ -538,8 +538,8 @@ let _ = conn.execute(
 
 ## Security & Privacy
 
-- **Local storage only**: Tracking database never leaves the machine
-- **Telemetry requires consent**: RTK can send a daily anonymous usage ping (version, OS, command counts, token savings). Disabled by default, requires explicit consent via `rtk init` or `rtk telemetry enable`. Manage with `rtk telemetry status/disable/forget`. Override: `RTK_TELEMETRY_DISABLED=1`
+- **Local storage only**: Tracking database never leaves the machine. The
+  Algolia fork ships with telemetry stripped — there is no remote ping.
 - **User control**: Users can delete `~/.local/share/rtk/tracking.db` anytime
 - **90-day retention**: Old data automatically purged
 

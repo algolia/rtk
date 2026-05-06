@@ -408,41 +408,12 @@ brew uninstall rtk           # If installed via Homebrew
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — contribution guide
 - **[SECURITY.md](SECURITY.md)** — security policy
 
-## Privacy & Telemetry
+## Privacy
 
-RTK can collect **anonymous, aggregate usage metrics** once per day. Telemetry is **disabled by default** and requires **explicit opt-in consent** (GDPR Art. 6, 7) during `rtk init` or via `rtk telemetry enable`. This data helps us build a better product: identifying which commands need filters, which filters need improvement, and how much value RTK delivers. For the full list of fields, data handling, and contributor guidelines, see **[docs/TELEMETRY.md](docs/TELEMETRY.md)**.
-
-**What is collected and why:**
-
-| Category | Data | Why |
-|----------|------|-----|
-| Identity | Salted device hash (SHA-256, not reversible) | Count unique installations without tracking individuals |
-| Environment | RTK version, OS, architecture, install method | Know which platforms to support and test |
-| Usage volume | Command count (24h), total commands, tokens saved (24h/30d/total) | Measure adoption and value delivered |
-| Quality | Top 5 passthrough commands (0% savings), parse failure count, commands with <30% savings | Identify missing filters and weak ones to improve |
-| Ecosystem | Command category distribution (e.g. git 45%, cargo 20%, js 15%) | Prioritize filter development for popular ecosystems |
-| Retention | Days since first use, active days in last 30 | Understand engagement and detect churn |
-| Adoption | AI agent hook type (claude/gemini/codex), custom TOML filter count | Track integration coverage and DSL adoption |
-| Configuration | Whether config.toml exists, number of excluded commands, project count | Understand user maturity and customization patterns |
-| Features | Usage counts for meta-commands (gain, discover, proxy, verify) | Know which RTK features are valued vs unused |
-| Economics | Estimated USD savings (based on API token pricing) | Quantify the value RTK provides to users |
-
-All data is **aggregate counts or anonymized command names** (first 3 words, no arguments). Top commands report only tool names (e.g. "git", "cargo"), never full command lines.
-
-**What is NOT collected:** source code, file paths, command arguments, secrets, environment variables, personal data, or repository contents.
-
-**Manage telemetry:**
-```bash
-rtk telemetry status     # Check current consent state
-rtk telemetry enable     # Give consent (interactive prompt)
-rtk telemetry disable    # Withdraw consent — stops all collection immediately
-rtk telemetry forget     # Withdraw consent + delete all local data + request server-side erasure
-```
-
-**Override via environment:**
-```bash
-export RTK_TELEMETRY_DISABLED=1   # Blocks telemetry regardless of consent
-```
+This Algolia fork strips all telemetry from upstream. RTK does not phone
+home: no anonymous pings, no usage stats, no remote calls. All metrics
+(`rtk gain`, `rtk discover`) stay in `~/.local/share/rtk/tracking.db`
+on your machine.
 
 ## Star History
 
