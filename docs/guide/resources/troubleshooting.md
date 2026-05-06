@@ -15,12 +15,12 @@ $ rtk gain
 rtk: 'gain' is not a rtk command. See 'rtk --help'.
 ```
 
-**Cause:** You installed **Rust Type Kit** (`reachingforthejack/rtk`) instead of **Rust Token Killer** (`rtk-ai/rtk`). They share the same binary name.
+**Cause:** You installed **Rust Type Kit** (`reachingforthejack/rtk`) instead of **Rust Token Killer** (`algolia/rtk`). They share the same binary name.
 
 **Fix:**
 ```bash
 cargo uninstall rtk
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/main/install.sh | sh
 rtk gain    # should now show token savings stats
 ```
 
@@ -112,7 +112,7 @@ rtk --version
 **Fix:** Use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) for full hook support:
 ```bash
 # Inside WSL
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/main/install.sh | sh
 rtk init -g    # full hook mode works in WSL
 ```
 
@@ -130,7 +130,7 @@ Error: program not found
 
 **Fix:** Update to RTK v0.23.1+:
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 rtk --version    # should be 0.23.1+
 ```
 
@@ -161,7 +161,7 @@ If Rust Type Kit is published to crates.io under the name `rtk`, `cargo install 
 Always use the explicit URL:
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ## Run the diagnostic script
@@ -181,4 +181,4 @@ Checks:
 
 ## Still stuck?
 
-Open an issue: https://github.com/rtk-ai/rtk/issues
+Open an issue: https://github.com/algolia/rtk/issues

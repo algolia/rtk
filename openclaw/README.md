@@ -19,7 +19,7 @@ RTK must be installed and available in `$PATH`:
 ```bash
 brew install rtk
 # or
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/main/install.sh | sh
 ```
 
 ### Install the plugin
@@ -61,7 +61,7 @@ In `openclaw.json`:
 
 ## What gets rewritten
 
-Everything that `rtk rewrite` supports (30+ commands). See the [full command list](https://github.com/rtk-ai/rtk#commands).
+Everything that `rtk rewrite` supports (30+ commands). See the [full command list](https://github.com/algolia/rtk#commands).
 
 ## What's NOT rewritten
 

@@ -42,7 +42,7 @@ Use this template to generate GitHub PR review comments. Fill in each section ba
 {- Description of what's done right.}
 
 ---
-*Automated review via [rtk](https://github.com/rtk-ai/rtk) `/pr-triage`*
+*Automated review via [rtk](https://github.com/algolia/rtk) `/pr-triage`*
 ```
 
 ---

@@ -1,15 +1,15 @@
 {
-  "name": "@rtk-ai/rtk-rewrite",
+  "name": "@algolia/rtk-rewrite",
   "version": "1.0.0",
   "description": "RTK plugin for OpenClaw — rewrites shell commands for 60-90% LLM token savings",
   "main": "index.ts",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rtk-ai/rtk",
+    "url": "https://github.com/algolia/rtk",
     "directory": "openclaw"
   },
-  "homepage": "https://github.com/rtk-ai/rtk",
+  "homepage": "https://github.com/algolia/rtk",
   "keywords": [
     "rtk",
     "openclaw",

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">ウェブサイト</a> &bull;
+  
   <a href="#インストール">インストール</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">トラブルシューティング</a> &bull;
   <a href="docs/contributing/ARCHITECTURE.md">アーキテクチャ</a> &bull;

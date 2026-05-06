@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">官网</a> &bull;
+  
   <a href="#安装">安装</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">故障排除</a> &bull;
   <a href="docs/contributing/ARCHITECTURE.md">架构</a> &bull;

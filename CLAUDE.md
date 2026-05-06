@@ -11,12 +11,12 @@ This is a fork with critical fixes for git argument parsing and modern JavaScrip
 ### Name Collision Warning
 
 **Two different "rtk" projects exist:**
-- This project: Rust Token Killer (rtk-ai/rtk)
+- This project: Rust Token Killer (algolia/rtk, fork of rtk-ai/rtk)
 - reachingforthejack/rtk: Rust Type Kit (DIFFERENT - generates Rust types)
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.28.2" (or newer)
+rtk --version  # Should show the version from Cargo.toml (rtk 0.38.0-algolia.1 or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 

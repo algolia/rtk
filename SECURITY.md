@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in RTK, please report it to the maintainers privately:
 
-- **Email**: security@rtk-ai.app (or create a private security advisory on GitHub)
+- **Email**: security@rtk-ai.dev (or create a private security advisory on GitHub)
 - **Response time**: We aim to acknowledge reports within 48 hours
 - **Disclosure**: We follow responsible disclosure practices (90-day embargo)
 
@@ -114,7 +114,7 @@ bash scripts/detect-dangerous-patterns.sh /tmp/pr.diff
 | `SystemTime::now() > ...` | Logic bombs | Delayed malicious behavior |
 | Base64/hex strings | Obfuscation | Hides malicious URLs/commands |
 
-See [Dangerous Patterns Reference](https://github.com/rtk-ai/rtk/wiki/Dangerous-Patterns) for exploitation examples.
+See [Dangerous Patterns Reference](https://github.com/algolia/rtk/wiki/Dangerous-Patterns) for exploitation examples.
 
 ---
 
@@ -208,8 +208,8 @@ Critical vulnerabilities (remote code execution, data exfiltration) may be fast-
 
 ## Contact
 
-- **Security issues**: security@rtk-ai.app
-- **General questions**: https://github.com/rtk-ai/rtk/discussions
+- **Security issues**: security@rtk-ai.dev
+- **General questions**: https://github.com/algolia/rtk/discussions
 - **Maintainers**: @FlorianBruniaux (active fork maintainer)
 
 ---

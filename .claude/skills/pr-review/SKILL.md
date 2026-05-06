@@ -78,11 +78,11 @@ gh pr list --state open --limit 200 \
 gh pr view <num> --json mergeable,mergeStateStatus,statusCheckRollup,reviewDecision
 
 # 2. Reviews existantes (CHANGES_REQUESTED ?)
-gh api repos/rtk-ai/rtk/pulls/<num>/reviews \
+gh api repos/algolia/rtk/pulls/<num>/reviews \
   --jq '.[] | {author: .user.login, state: .state, body: .body}'
 
 # 3. Commentaires inline (si CHANGES_REQUESTED)
-gh api repos/rtk-ai/rtk/pulls/<num>/comments \
+gh api repos/algolia/rtk/pulls/<num>/comments \
   --jq '.[] | {author: .user.login, body: .body, path: .path, line: .line}'
 ```
 
@@ -109,7 +109,7 @@ Si le diff touche une logique complexe (filter functions, regex, routing) → li
 Format de présentation **obligatoire** pour chaque PR :
 
 ```
-**PR #<num>** — https://github.com/rtk-ai/rtk/pull/<num>
+**PR #<num>** — https://github.com/algolia/rtk/pull/<num>
 
 **Author**: <login> | **Size**: <XS/S/M/L> (+<add> -<del>, <N> fichiers) | **CLA**: <ok/non signé> | **Mergeable**: <clean/conflit>
 

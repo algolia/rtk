@@ -7,18 +7,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rtk-ai/rtk/actions"><img src="https://github.com/rtk-ai/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
-  <a href="https://github.com/rtk-ai/rtk/releases"><img src="https://img.shields.io/github/v/release/rtk-ai/rtk" alt="Release"></a>
+  <a href="https://github.com/algolia/rtk/actions"><img src="https://github.com/algolia/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
+  <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1470188214710046894?label=Discord&logo=discord" alt="Discord"></a>
-  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">Website</a> &bull;
   <a href="#installation">Install</a> &bull;
-  <a href="https://www.rtk-ai.app/guide/troubleshooting">Troubleshooting</a> &bull;
-  <a href="ARCHITECTURE.md">Architecture</a> &bull;
+  <a href="docs/guide/resources/troubleshooting.md">Troubleshooting</a> &bull;
+  <a href="docs/contributing/ARCHITECTURE.md">Architecture</a> &bull;
   <a href="https://discord.gg/RySmvNF5kF">Discord</a>
 </p>
 
@@ -57,16 +55,12 @@ rtk filters and compresses command outputs before they reach your LLM context. S
 
 ## Installation
 
-### Homebrew (recommended)
-
-```bash
-brew install rtk
-```
+> The Algolia fork has no Homebrew tap. Use one of the methods below.
 
 ### Quick Install (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/main/install.sh | sh
 ```
 
 > Installs to `~/.local/bin`. Add to PATH if needed:
@@ -77,12 +71,12 @@ curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/instal
 ### Cargo
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### Pre-built Binaries
 
-Download from [releases](https://github.com/rtk-ai/rtk/releases):
+Download from [releases](https://github.com/algolia/rtk/releases):
 - macOS: `rtk-x86_64-apple-darwin.tar.gz` / `rtk-aarch64-apple-darwin.tar.gz`
 - Linux: `rtk-x86_64-unknown-linux-musl.tar.gz` / `rtk-aarch64-unknown-linux-gnu.tar.gz`
 - Windows: `rtk-x86_64-pc-windows-msvc.zip`
@@ -92,7 +86,7 @@ Download from [releases](https://github.com/rtk-ai/rtk/releases):
 ### Verify Installation
 
 ```bash
-rtk --version   # Should show "rtk 0.28.2"
+rtk --version   # Should show the version from Cargo.toml (rtk 0.38.0-algolia.1 or newer)
 rtk gain        # Should show token savings stats
 ```
 
@@ -321,7 +315,7 @@ For the best experience, use [WSL](https://learn.microsoft.com/en-us/windows/wsl
 
 ```bash
 # Inside WSL
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/main/install.sh | sh
 rtk init -g
 ```
 
@@ -364,11 +358,11 @@ RTK supports 12 AI coding tools. Each integration transparently rewrites shell c
 | **Cline / Roo Code** | `rtk init --agent cline` | .clinerules (project-scoped) |
 | **OpenCode** | `rtk init -g --opencode` | Plugin TS (tool.execute.before) |
 | **OpenClaw** | `openclaw plugins install ./openclaw` | Plugin TS (before_tool_call) |
-| **Mistral Vibe** | Planned ([#800](https://github.com/rtk-ai/rtk/issues/800)) | Blocked on upstream |
+| **Mistral Vibe** | Planned (tracked upstream) | Blocked on upstream |
 | **Kilo Code** | `rtk init --agent kilocode` | .kilocode/rules/rtk-rules.md (project-scoped) |
 | **Google Antigravity** | `rtk init --agent antigravity` | .agents/rules/antigravity-rtk-rules.md (project-scoped) |
 
-For per-agent setup details, override controls, and graceful degradation, see the [Supported Agents guide](https://www.rtk-ai.app/guide/getting-started/supported-agents).
+For per-agent setup details, override controls, and graceful degradation, see [`docs/guide/getting-started/supported-agents.md`](docs/guide/getting-started/supported-agents.md).
 
 ## Configuration
 
@@ -390,21 +384,19 @@ FAILED: 2/15 tests
 [full output: ~/.local/share/rtk/tee/1707753600_cargo_test.log]
 ```
 
-For the full config reference (all sections, env vars, per-project filters), see the [Configuration guide](https://www.rtk-ai.app/guide/getting-started/configuration).
+For the full config reference (all sections, env vars, per-project filters), see [`docs/guide/getting-started/configuration.md`](docs/guide/getting-started/configuration.md).
 
 ### Uninstall
 
 ```bash
 rtk init -g --uninstall     # Remove hook, RTK.md, settings.json entry
 cargo uninstall rtk          # Remove binary
-brew uninstall rtk           # If installed via Homebrew
 ```
 
 ## Documentation
 
-- **[rtk-ai.app/guide](https://www.rtk-ai.app/guide)** — full user guide (installation, supported agents, what gets optimized, analytics, configuration, troubleshooting)
 - **[INSTALL.md](INSTALL.md)** — detailed installation reference
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** — system design and technical decisions
+- **[docs/contributing/ARCHITECTURE.md](docs/contributing/ARCHITECTURE.md)** — system design and technical decisions
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — contribution guide
 - **[SECURITY.md](SECURITY.md)** — security policy
 
@@ -415,38 +407,9 @@ home: no anonymous pings, no usage stats, no remote calls. All metrics
 (`rtk gain`, `rtk discover`) stay in `~/.local/share/rtk/tracking.db`
 on your machine.
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=rtk-ai%2Frtk&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=rtk-ai/rtk&type=date&legend=top-left" />
- </picture>
-</a>
-
-## StarMapper
-
-<a href="https://starmapper.bruniaux.com/rtk-ai/rtk">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk?theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk?theme=light" />
-    <img alt="StarMapper" src="https://starmapper.bruniaux.com/api/map-image/rtk-ai/rtk" />
-  </picture>
-</a>
-
-## Core team
-
-- **Patrick Szymkowiak** — Founder
-  [GitHub](https://github.com/pszymkowiak) · [LinkedIn](https://www.linkedin.com/in/patrick-szymkowiak/)
-- **Florian Bruniaux** — Core contributor
-  [GitHub](https://github.com/FlorianBruniaux) · [LinkedIn](https://www.linkedin.com/in/florian-bruniaux-43408b83/)
-- **Adrien Eppling** — Core contributor
-  [GitHub](https://github.com/aeppling) · [LinkedIn](https://www.linkedin.com/in/adrien-eppling/)
-
 ## Contributing
 
-Contributions welcome! Please open an issue or PR on [GitHub](https://github.com/rtk-ai/rtk).
+Contributions welcome! Please open an issue or PR on [GitHub](https://github.com/algolia/rtk).
 
 Join the community on [Discord](https://discord.gg/RySmvNF5kF).
 
