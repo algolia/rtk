@@ -1,13 +1,12 @@
 //! Filters Next.js build output down to route metrics and bundle sizes.
 
-use crate::core::tracking;
+use crate::core::runner;
+use crate::core::truncate::CAP_WARNINGS;
 use crate::core::utils::{resolved_command, strip_ansi, tool_exists, truncate};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use regex::Regex;
 
-pub fn run(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
+pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     // Try next directly first, fallback to npx if not found
     let next_exists = tool_exists("next");
 
@@ -30,25 +29,13 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: {} build", tool);
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to run next build (try: npm install -g next)")?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let filtered = filter_next_build(&raw);
-
-    println!("{}", filtered);
-
-    timer.track("next build", "rtk next build", &raw, &filtered);
-
-    // Preserve exit code for CI/CD
-    if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
-    }
-
-    Ok(())
+    runner::run_filtered(
+        cmd,
+        "next build",
+        &args.join(" "),
+        filter_next_build,
+        runner::RunOptions::default(),
+    )
 }
 
 /// Filter Next.js build output - extract routes, bundles, warnings
@@ -145,7 +132,8 @@ fn filter_next_build(output: &str) -> String {
         // Sort by size (descending) and show top 10
         bundles.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        for (route, size, pct_change) in bundles.iter().take(10) {
+        const MAX_BUNDLES: usize = CAP_WARNINGS;
+        for (route, size, pct_change) in bundles.iter().take(MAX_BUNDLES) {
             let warning_marker = if let Some(pct) = pct_change {
                 if *pct > 10.0 {
                     format!(" [warn] (+{:.0}%)", pct)
@@ -164,8 +152,11 @@ fn filter_next_build(output: &str) -> String {
             ));
         }
 
-        if bundles.len() > 10 {
-            result.push_str(&format!("\n  ... +{} more routes\n", bundles.len() - 10));
+        if bundles.len() > MAX_BUNDLES {
+            result.push_str(&format!(
+                "\n  ... +{} more routes\n",
+                bundles.len() - MAX_BUNDLES
+            ));
         }
 
         result.push('\n');

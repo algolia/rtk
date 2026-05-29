@@ -1,6 +1,6 @@
 # Core Infrastructure
 
-> See also [docs/TECHNICAL.md](../../docs/TECHNICAL.md) for the full architecture overview
+> See also [docs/contributing/TECHNICAL.md](../../docs/contributing/TECHNICAL.md) for the full architecture overview
 
 ## Scope
 
@@ -11,7 +11,7 @@ Owns: configuration loading, token tracking persistence, TOML filter engine, tee
 Does **not** own: command-specific filtering logic (that's `cmds/`), hook lifecycle management (that's `src/hooks/`), or analytics dashboards (that's `analytics/`).
 
 ## Purpose
-Core infrastructure shared by all RTK command modules. These are the foundational building blocks that every filter, tracker, and command handler depends on. This module group has no inward dependencies — it is a leaf in the dependency graph, ensuring clean layering across the codebase.
+Core infrastructure shared by all RTK command modules. Every filter, tracker, and command handler depends on these modules. No inward dependencies — leaf in the dependency graph (no circular imports possible).
 
 ## TOML Filter Pipeline
 
@@ -116,11 +116,17 @@ Consumers must call `timer.track()` on **all** code paths — success, failure, 
 
 Consumers that parse structured output (JSON, NDJSON, state machines) should call `tee::tee_and_hint()` to save raw output for LLM recovery on failure. Tee must be called before `std::process::exit()`.
 
-### Gaps (to be fixed)
+For truncation recovery on **success** (e.g., list truncated at 20 items), use `tee::force_tee_hint()` which bypasses the tee mode check and writes regardless of exit code. This ensures LLMs always have a `[full output: ...]` recovery path instead of burning tokens working around missing data.
 
-- `ls.rs`, `tree.rs` — exit before `track()` on error path (lost metrics)
-- `container.rs` — inconsistent tracking across subcommands
-- Many command modules still missing tee integration — see `src/cmds/README.md` for the full list
+When the truncated output is a **flat list** and the hidden items start at a predictable line, prefer `tee::force_tee_tail_hint(content, slug, offset)`. It writes the same tee file but emits a directly runnable hint — `[see remaining: tail -n +{offset} ~/path]` — so the agent jumps to exactly the first hidden item without scanning the whole file. The offset is `header_lines + MAX_CAP + 1`. Use `force_tee_hint` instead when the output has multiple sections (e.g. running + stopped containers) and no single offset cleanly covers the gap.
+
+### Truncation Caps (`truncate`)
+
+`src/core/truncate.rs` defines four global cap policies — `CAP_ERRORS`, `CAP_WARNINGS`, `CAP_LIST`, `CAP_INVENTORY` — for the data classes RTK filters truncate. Each filter binds the right CAP to a local `const MAX_*` so the cap is one named jump away from the call site. These CAPs are the staging point for filter-level cap configuration (planned, not yet implemented): once the config surface lands, overriding `CAP_LIST` in `~/.config/rtk/config.toml` will tune every list filter in one place instead of editing 20+ files.
+
+**Config policy.** Configured values are accepted as-is, including `0`, which means "summary only" — the filter still prints the count and the `[full output: …]` recovery hint, just no individual items. Caps are never refused and rtk never aborts on them, in keeping with the never-block-the-user fallback philosophy.
+
+**Deviating from a cap.** A filter whose items are unusually verbose (multi-line entries, backtraces) may show fewer than its class cap. Use `truncate::reduced(cap, by)` rather than a bare `cap - by`: `reduced` returns `cap - by`, except when the reduction would empty the list (`by >= cap`), in which case it drops the deviation and uses the full `cap`. This guarantees a deviation can never hide every item, and — crucially — stays a `usize`-underflow-safe `const fn` once caps become runtime-configurable (a bare `CAP_WARNINGS - 5` would panic or wrap to "no truncation" if a user set `CAP_WARNINGS` below `5`). Never deviate with a bare literal or with `*`/`/` (those scale unboundedly). Each deviation needs a one-line comment stating why.
 
 ## Adding New Functionality
 Place new infrastructure code here if it meets **all** of these criteria: (1) it has no dependencies on command modules or hooks, (2) it is used by two or more other modules, and (3) it provides a general-purpose utility rather than command-specific logic. Follow the existing pattern of lazy-initialized resources (`lazy_static!` for regex, on-demand config loading) to preserve the <10ms startup target. Add `#[cfg(test)] mod tests` with unit tests in the same file.

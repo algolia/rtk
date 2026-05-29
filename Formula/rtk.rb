@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Homebrew formula for rtk - Rust Token Killer
-# To install: brew tap algolia/tap && brew install rtk
+# To install: cargo install --git https://github.com/algolia/rtk
 class Rtk < Formula
   desc "High-performance CLI proxy to minimize LLM token consumption"
   homepage "https://github.com/algolia/rtk"

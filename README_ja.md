@@ -11,12 +11,14 @@
   <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1478373640461488159?label=Discord&logo=discord" alt="Discord"></a>
+  <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/algolia/rtk">ウェブサイト</a> &bull;
   <a href="#インストール">インストール</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">トラブルシューティング</a> &bull;
-  <a href="ARCHITECTURE.md">アーキテクチャ</a> &bull;
+  <a href="docs/contributing/ARCHITECTURE.md">アーキテクチャ</a> &bull;
   <a href="https://discord.gg/RySmvNF5kF">Discord</a>
 </p>
 
@@ -46,7 +48,13 @@ rtk はコマンド出力を LLM コンテキストに届く前にフィルタ�
 
 ## インストール
 
-### クイックインストール（Linux/macOS、推奨）
+### Homebrew（推奨）
+
+```bash
+cargo install --git https://github.com/algolia/rtk
+```
+
+### クイックインストール（Linux/macOS）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
@@ -61,7 +69,7 @@ cargo install --git https://github.com/algolia/rtk
 ### 確認
 
 ```bash
-rtk --version   # "rtk 0.34.x-algolia.y" と表示されるはず
+rtk --version   # "rtk 0.27.x" と表示されるはず
 rtk gain        # トークン節約統計が表示されるはず
 ```
 
@@ -113,10 +121,11 @@ rtk git push                    # -> "ok main"
 
 ### テスト
 ```bash
-rtk test cargo test             # 失敗のみ表示（-90%）
-rtk vitest run                  # Vitest コンパクト
+rtk jest                        # Jest コンパクト
+rtk vitest                      # Vitest コンパクト
 rtk pytest                      # Python テスト（-90%）
 rtk go test                     # Go テスト（-90%）
+rtk test <cmd>                  # 失敗のみ表示（-90%）
 ```
 
 ### ビルド & リント
@@ -138,7 +147,7 @@ rtk discover                    # 見逃した節約機会を発見
 
 - **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - よくある問題の解決
 - **[INSTALL.md](INSTALL.md)** - 詳細インストールガイド
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - 技術アーキテクチャ
+- **[ARCHITECTURE.md](docs/contributing/ARCHITECTURE.md)** - 技術アーキテクチャ
 
 ## コントリビュート
 
@@ -149,3 +158,7 @@ rtk discover                    # 見逃した節約機会を発見
 ## ライセンス
 
 MIT ライセンス - 詳細は [LICENSE](LICENSE) を参照。
+
+## 免責事項
+
+詳細は [DISCLAIMER.md](DISCLAIMER.md) を参照。

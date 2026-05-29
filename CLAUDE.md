@@ -16,7 +16,7 @@ This is a fork with critical fixes for git argument parsing and modern JavaScrip
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.34.x-algolia.y" (or newer)
+rtk --version  # Should show "rtk 0.42.x-algolia.y" (or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 
@@ -70,8 +70,8 @@ cargo generate-rpm            # RPM package (needs cargo-generate-rpm, after rel
 rtk uses a **command proxy architecture**: `main.rs` routes CLI commands via a Clap `Commands` enum to specialized filter modules in `src/cmds/*/`, each of which executes the underlying command and compresses its output. Token savings are tracked in SQLite via `src/core/tracking.rs`.
 
 For the full architecture, component details, and module development patterns, see:
-- [ARCHITECTURE.md](ARCHITECTURE.md) — System design, module organization, filtering strategies, error handling
-- [docs/TECHNICAL.md](docs/TECHNICAL.md) — End-to-end flow, folder map, hook system, filter pipeline
+- [ARCHITECTURE.md](docs/contributing/ARCHITECTURE.md) — System design, module organization, filtering strategies, error handling
+- [docs/TECHNICAL.md](docs/contributing/TECHNICAL.md) — End-to-end flow, folder map, hook system, filter pipeline
 
 Module responsibilities are documented in each folder's `README.md` and each file's `//!` doc header. Browse `src/cmds/*/` to discover available filters.
 
@@ -164,13 +164,18 @@ This is the **Algolia fork** (`algolia/rtk`), not the upstream (`rtk-ai/rtk`). U
 
 ### Pre-commit Checklist (after rebase or before release)
 
-Run this grep to catch upstream leaks:
+Run the hygiene gate — it catches every known leak class (repo slug, website,
+email, Homebrew, stale version strings, telemetry residue in docs/source, dead
+links to deleted telemetry docs):
 
 ```bash
-rg -i 'brew install rtk[^-]|rtk-ai\.app|contact@rtk|"rtk 0\.\d+\.\d+"' --glob '*.md' --glob '*.rb'
+scripts/fork-hygiene.sh          # CHECK only — exit 1 on any leak
+scripts/fork-hygiene.sh --fix    # auto-fix the deterministic ones, then CHECK
 ```
 
-**Zero matches required.** Any hit must be fixed before commit.
+**Zero matches required.** `--fix` handles repo/website/email/brew/version
+mechanically; telemetry scrub, legal text (LICENSE/CLA), and code-comment
+provenance are left for manual judgment (see the script header).
 
 ### Banned Patterns in User-Facing Docs
 
@@ -189,9 +194,35 @@ All `README*.md`, `INSTALL.md`, `CLAUDE.md`, `openclaw/README.md`, `Formula/rtk.
 
 ### On Release
 
-1. Run the grep above — fix any matches
+1. Run `scripts/fork-hygiene.sh` — fix any matches
 2. Update version strings in docs to match `Cargo.toml`
 3. Verify `gh repo view --json homepageUrl` returns empty (not upstream URL)
+
+## Upstream Catchup Procedure
+
+Full realignment, **not** cherry-picks. Default target is `upstream/master`
+(latest stable tag), not `develop`. Result is one squashed commit on top of the
+upstream tag (see `git log` for prior `fork: upstream catchup ...` commits).
+
+1. **Fetch + measure**: `git fetch upstream --tags`; compare `main..upstream/master`.
+2. **Branch from the tag**: `git checkout -b fork/upstream-realign-vX.Y.Z upstream/master`.
+3. **Toolchain**: upstream needs a modern cargo (edition2024 deps). If system
+   `cargo` is old, use the rustup shim: `~/.cargo/bin/cargo` (run `rustup update stable` first).
+4. **Strip telemetry** (hard rule): delete `src/core/telemetry*.rs` + telemetry docs;
+   remove the `[telemetry]` config, `rtk telemetry` command + consent flow, `maybe_ping()`,
+   and the `ureq` dep. Then `cargo check` and delete whatever stat helpers it reports as
+   newly-dead (they only fed telemetry). Keep local SQLite tracking (`gain`/`discover`).
+5. **Re-apply fork code fixes**: diff our patches in isolation with
+   `git diff <prev-base-tag>..main -- src/` to see what's ours; re-apply anything
+   upstream hasn't absorbed (currently: `registry.rs` shell-function + curl/wget pipe skips).
+6. **Identity**: `scripts/fork-hygiene.sh --fix`, then scrub any telemetry residue
+   from docs by hand. Restore fork-specific `CLAUDE.md` from the old `main` if the
+   branch switch replaced it; fix its doc-links to the current layout.
+7. **Re-apply CI guards**: release-asset verification + `main`-branch triggers (see `release.yml`/`cd.yml`).
+8. **Version**: `Cargo.toml` → `X.Y.Z-algolia.N`; keep `.release-please-manifest.json`
+   at the upstream base `X.Y.Z`; add a `CHANGELOG.md` fork entry.
+9. **Gate**: `cargo fmt --all && cargo clippy --all-targets && cargo test --all`
+   and `scripts/fork-hygiene.sh`. All green → squash-commit → tag `vX.Y.Z-algolia.N`.
 
 ## Plan Execution Protocol
 

@@ -29,7 +29,7 @@
 //!
 //! See [docs/tracking.md](../docs/tracking.md) for full documentation.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use serde::Serialize;
@@ -61,8 +61,7 @@ fn project_filter_params(project_path: Option<&str>) -> (Option<String>, Option<
     }
 }
 
-/// Number of days to retain tracking history before automatic cleanup.
-const HISTORY_DAYS: i64 = 90;
+use super::constants::{DEFAULT_HISTORY_DAYS, HISTORY_DB, RTK_DATA_DIR};
 
 /// Main tracking interface for recording and querying command history.
 ///
@@ -327,6 +326,57 @@ impl Tracker {
         Ok(Self { conn })
     }
 
+    /// Create an isolated in-memory tracker for tests.
+    #[cfg(test)]
+    pub fn new_in_memory() -> Result<Self> {
+        let conn = Connection::open_in_memory().context("Failed to open in-memory DB")?;
+        let tracker = Self { conn };
+        tracker.init_schema()?;
+        Ok(tracker)
+    }
+
+    #[cfg(test)]
+    fn init_schema(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS commands (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                original_cmd TEXT NOT NULL,
+                rtk_cmd TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                saved_tokens INTEGER NOT NULL,
+                savings_pct REAL NOT NULL,
+                exec_time_ms INTEGER DEFAULT 0,
+                project_path TEXT DEFAULT ''
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_timestamp ON commands(timestamp)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_path_timestamp ON commands(project_path, timestamp)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS parse_failures (
+                id INTEGER PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                raw_command TEXT NOT NULL,
+                error_message TEXT NOT NULL,
+                fallback_succeeded INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pf_timestamp ON parse_failures(timestamp)",
+            [],
+        )?;
+        Ok(())
+    }
+
     /// Record a command execution with token counts and timing.
     ///
     /// Calculates savings metrics and stores the record in the database.
@@ -387,7 +437,7 @@ impl Tracker {
     }
 
     fn cleanup_old(&self) -> Result<()> {
-        let cutoff = Utc::now() - chrono::Duration::days(HISTORY_DAYS);
+        let cutoff = Utc::now() - chrono::Duration::days(DEFAULT_HISTORY_DAYS);
         self.conn.execute(
             "DELETE FROM commands WHERE timestamp < ?1",
             params![cutoff.to_rfc3339()],
@@ -396,6 +446,19 @@ impl Tracker {
             "DELETE FROM parse_failures WHERE timestamp < ?1",
             params![cutoff.to_rfc3339()],
         )?;
+        Ok(())
+    }
+
+    /// Delete all tracked data (commands + parse_failures), resetting all stats to zero.
+    pub fn reset_all(&self) -> Result<()> {
+        self.conn
+            .execute_batch(
+                "BEGIN;
+                 DELETE FROM commands;
+                 DELETE FROM parse_failures;
+                 COMMIT;",
+            )
+            .context("Failed to reset tracking database")?;
         Ok(())
     }
 
@@ -897,71 +960,6 @@ impl Tracker {
 
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
-
-    /// Count commands since a given timestamp (for telemetry).
-    #[allow(dead_code)]
-    pub fn count_commands_since(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
-        let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM commands WHERE timestamp >= ?1",
-            params![ts],
-            |row| row.get(0),
-        )?;
-        Ok(count)
-    }
-
-    /// Get top N commands by frequency (for telemetry).
-    #[allow(dead_code)]
-    pub fn top_commands(&self, limit: usize) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT rtk_cmd, COUNT(*) as cnt FROM commands
-             GROUP BY rtk_cmd ORDER BY cnt DESC LIMIT ?1",
-        )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            let cmd: String = row.get(0)?;
-            // Extract just the command name (e.g. "rtk git status" → "git")
-            Ok(cmd.split_whitespace().nth(1).unwrap_or(&cmd).to_string())
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
-    }
-
-    /// Get overall savings percentage (for telemetry).
-    #[allow(dead_code)]
-    pub fn overall_savings_pct(&self) -> Result<f64> {
-        let (total_input, total_saved): (i64, i64) = self.conn.query_row(
-            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(saved_tokens), 0) FROM commands",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
-        if total_input > 0 {
-            Ok((total_saved as f64 / total_input as f64) * 100.0)
-        } else {
-            Ok(0.0)
-        }
-    }
-
-    /// Get total tokens saved across all tracked commands (for telemetry).
-    #[allow(dead_code)]
-    pub fn total_tokens_saved(&self) -> Result<i64> {
-        let saved: i64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(saved)
-    }
-
-    /// Get tokens saved in the last 24 hours (for telemetry).
-    #[allow(dead_code)]
-    pub fn tokens_saved_24h(&self, since: chrono::DateTime<chrono::Utc>) -> Result<i64> {
-        let ts = since.format("%Y-%m-%dT%H:%M:%S").to_string();
-        let saved: i64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(saved_tokens), 0) FROM commands WHERE timestamp >= ?1",
-            params![ts],
-            |row| row.get(0),
-        )?;
-        Ok(saved)
-    }
 }
 
 fn get_db_path() -> Result<PathBuf> {
@@ -979,7 +977,7 @@ fn get_db_path() -> Result<PathBuf> {
 
     // Priority 3: Default platform-specific location
     let data_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    Ok(data_dir.join("rtk").join("history.db"))
+    Ok(data_dir.join(RTK_DATA_DIR).join(HISTORY_DB))
 }
 
 /// Individual parse failure record.
@@ -1166,42 +1164,6 @@ pub fn args_display(args: &[OsString]) -> String {
         .join(" ")
 }
 
-/// Track a command execution (legacy function, use [`TimedExecution`] for new code).
-///
-/// # Deprecation Notice
-///
-/// This function is deprecated. Use [`TimedExecution`] instead for automatic
-/// timing and cleaner API.
-///
-/// # Arguments
-///
-/// - `original_cmd`: Standard command (e.g., "ls -la")
-/// - `rtk_cmd`: RTK command used (e.g., "rtk ls")
-/// - `input`: Standard command output (for token estimation)
-/// - `output`: RTK command output (for token estimation)
-///
-/// # Migration
-///
-/// ```no_run
-/// # use rtk::tracking::{track, TimedExecution};
-/// // Old (deprecated)
-/// track("ls -la", "rtk ls", "input", "output");
-///
-/// // New (preferred)
-/// let timer = TimedExecution::start();
-/// timer.track("ls -la", "rtk ls", "input", "output");
-/// ```
-#[deprecated(note = "Use TimedExecution instead")]
-#[allow(dead_code)]
-pub fn track(original_cmd: &str, rtk_cmd: &str, input: &str, output: &str) {
-    let input_tokens = estimate_tokens(input);
-    let output_tokens = estimate_tokens(output);
-
-    if let Ok(tracker) = Tracker::new() {
-        let _ = tracker.record(original_cmd, rtk_cmd, input_tokens, output_tokens, 0);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1328,29 +1290,27 @@ mod tests {
     }
 
     // 7. get_db_path respects environment variable RTK_DB_PATH
-    #[test]
-    fn test_custom_db_path_env() {
-        use std::env;
-
-        let custom_path = "/tmp/rtk_test_custom.db";
-        env::set_var("RTK_DB_PATH", custom_path);
-
-        let db_path = get_db_path().expect("Failed to get db path");
-        assert_eq!(db_path, PathBuf::from(custom_path));
-
-        env::remove_var("RTK_DB_PATH");
-    }
-
     // 8. get_db_path falls back to default when no custom config
+    // Combined into one test to avoid env var race between parallel tests
     #[test]
-    fn test_default_db_path() {
+    fn test_db_path_env_and_default() {
         use std::env;
+        use std::sync::Mutex;
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
 
-        // Ensure no env var is set
-        env::remove_var("RTK_DB_PATH");
-
+        let custom_path = env::temp_dir().join("rtk_test_custom.db");
+        env::set_var("RTK_DB_PATH", &custom_path);
         let db_path = get_db_path().expect("Failed to get db path");
-        assert!(db_path.ends_with("rtk/history.db"));
+        assert_eq!(db_path, custom_path);
+
+        env::remove_var("RTK_DB_PATH");
+        let db_path = get_db_path().expect("Failed to get db path");
+        assert!(
+            db_path.ends_with("rtk/history.db"),
+            "expected default path ending with rtk/history.db, got: {}",
+            db_path.display()
+        );
     }
 
     // 9. project_filter_params uses GLOB pattern with * wildcard // added
@@ -1430,5 +1390,45 @@ mod tests {
         // We can't assert exact rate because other tests may have added records,
         // but we can verify recovery_rate is between 0 and 100
         assert!(summary.recovery_rate >= 0.0 && summary.recovery_rate <= 100.0);
+    }
+
+    #[test]
+    fn test_reset_all_clears_both_tables() {
+        let tracker = Tracker::new_in_memory().expect("Failed to create in-memory tracker");
+        let pid = std::process::id();
+
+        // Insert into commands
+        tracker
+            .record(
+                "git status",
+                &format!("rtk git status reset_test_{}", pid),
+                100,
+                20,
+                50,
+            )
+            .expect("Failed to record command");
+
+        // Insert into parse_failures
+        tracker
+            .record_parse_failure(&format!("bad_cmd_reset_test_{}", pid), "parse error", false)
+            .expect("Failed to record parse failure");
+
+        // Reset everything
+        tracker.reset_all().expect("Failed to reset");
+
+        // Both tables should be empty
+        let summary = tracker.get_summary().expect("Failed to get summary");
+        assert_eq!(
+            summary.total_commands, 0,
+            "commands table should be empty after reset"
+        );
+
+        let failures = tracker
+            .get_parse_failure_summary()
+            .expect("Failed to get failure summary");
+        assert_eq!(
+            failures.total, 0,
+            "parse_failures table should be empty after reset"
+        );
     }
 }

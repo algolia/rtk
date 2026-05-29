@@ -32,7 +32,7 @@ To move forward, we need the following:
 {What happens once the info is provided — e.g., "Once confirmed, we'll prioritize this for the next release."}
 
 ---
-*Triaged via [rtk](https://github.com/algolia/rtk) `/issue-triage`*
+*Triaged via [rtk](https://github.com/rtk-ai/rtk) `/issue-triage`*
 ```
 
 ---
@@ -53,7 +53,7 @@ This issue covers the same problem as #{original_number}: **{original_title}**.
 If your situation differs in an important way (different command, different OS, different error message), please reopen and add that context. Otherwise, follow the original issue for updates.
 
 ---
-*Triaged via [rtk](https://github.com/algolia/rtk) `/issue-triage`*
+*Triaged via [rtk](https://github.com/rtk-ai/rtk) `/issue-triage`*
 ```
 
 ---
@@ -74,7 +74,7 @@ If this is still relevant:
 Thanks for taking the time to report it.
 
 ---
-*Triaged via [rtk](https://github.com/algolia/rtk) `/issue-triage`*
+*Triaged via [rtk](https://github.com/rtk-ai/rtk) `/issue-triage`*
 ```
 
 ---
@@ -99,7 +99,7 @@ After review, this request falls outside RTK's current design goals.
 If the use case evolves or the scope changes in a future version, feel free to reopen with updated context.
 
 ---
-*Triaged via [rtk](https://github.com/algolia/rtk) `/issue-triage`*
+*Triaged via [rtk](https://github.com/rtk-ai/rtk) `/issue-triage`*
 ```
 
 ---

@@ -1,5 +1,6 @@
 //! Raw output recovery -- saves unfiltered output to disk on command failure.
 
+use super::constants::RTK_DATA_DIR;
 use crate::core::config::Config;
 use std::path::PathBuf;
 
@@ -46,7 +47,7 @@ fn get_tee_dir(config: &Config) -> Option<PathBuf> {
     }
 
     // Default: ~/.local/share/rtk/tee/
-    dirs::data_local_dir().map(|d| d.join("rtk").join("tee"))
+    dirs::data_local_dir().map(|d| d.join(RTK_DATA_DIR).join("tee"))
 }
 
 /// Rotate old tee files: keep only the last `max_files`, delete oldest.
@@ -120,11 +121,17 @@ fn write_tee_file(
     let filename = format!("{}_{}.log", epoch, slug);
     let filepath = tee_dir.join(filename);
 
-    // Truncate at max_file_size
+    // Truncate at max_file_size (find a safe UTF-8 char boundary)
     let content = if raw.len() > max_file_size {
+        let boundary = raw
+            .char_indices()
+            .take_while(|(i, _)| *i < max_file_size)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
         format!(
             "{}\n\n--- truncated at {} bytes ---",
-            &raw[..max_file_size],
+            &raw[..boundary],
             max_file_size
         )
     } else {
@@ -161,19 +168,17 @@ pub fn tee_raw(raw: &str, command_slug: &str, exit_code: i32) -> Option<PathBuf>
     )
 }
 
-/// Format the hint line with ~ shorthand for home directory.
-fn format_hint(path: &std::path::Path) -> String {
-    let display = if let Some(home) = dirs::home_dir() {
+fn display_path(path: &std::path::Path) -> String {
+    if let Some(home) = dirs::home_dir() {
         if let Ok(relative) = path.strip_prefix(&home) {
-            format!("~/{}", relative.display())
-        } else {
-            path.display().to_string()
+            return format!("~/{}", relative.display());
         }
-    } else {
-        path.display().to_string()
-    };
+    }
+    path.display().to_string()
+}
 
-    format!("[full output: {}]", display)
+fn format_hint(path: &std::path::Path) -> String {
+    format!("[full output: {}]", display_path(path))
 }
 
 /// Convenience: tee + format hint in one call.
@@ -181,6 +186,53 @@ fn format_hint(path: &std::path::Path) -> String {
 pub fn tee_and_hint(raw: &str, command_slug: &str, exit_code: i32) -> Option<String> {
     let path = tee_raw(raw, command_slug, exit_code)?;
     Some(format_hint(&path))
+}
+
+fn force_tee_path(content: &str, command_slug: &str) -> Option<PathBuf> {
+    if std::env::var("RTK_TEE").ok().as_deref() == Some("0") {
+        return None;
+    }
+
+    if content.is_empty() {
+        return None;
+    }
+
+    let config = Config::load().ok()?;
+
+    if !config.tee.enabled {
+        return None;
+    }
+
+    let tee_dir = get_tee_dir(&config)?;
+    let tee_dir = std::fs::create_dir_all(&tee_dir).ok().and(Some(tee_dir))?;
+
+    write_tee_file(
+        content,
+        command_slug,
+        &tee_dir,
+        config.tee.max_file_size,
+        config.tee.max_files,
+    )
+}
+
+/// Returns `[full output: ~/path]`, or None if tee is disabled/skipped.
+pub fn force_tee_hint(raw: &str, command_slug: &str) -> Option<String> {
+    let path = force_tee_path(raw, command_slug)?;
+    Some(format_hint(&path))
+}
+
+/// Returns `[see remaining: tail -n +{line_offset} ~/path]`, or None if tee is disabled/skipped.
+pub fn force_tee_tail_hint(
+    content: &str,
+    command_slug: &str,
+    line_offset: usize,
+) -> Option<String> {
+    let path = force_tee_path(content, command_slug)?;
+    Some(format!(
+        "[see remaining: tail -n +{} {}]",
+        line_offset,
+        display_path(&path)
+    ))
 }
 
 /// TeeMode controls when tee writes files.
@@ -318,6 +370,47 @@ mod tests {
     }
 
     #[test]
+    fn test_write_tee_file_truncation_utf8_boundary() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        // Create a string where the truncation point falls inside a multi-byte char.
+        // Japanese chars are 3 bytes each in UTF-8.
+        // 332 chars * 3 bytes = 996 bytes, then one more = 999 bytes.
+        // With max_file_size=998, the cut falls mid-character.
+        let japanese = "\u{6F22}".repeat(333); // 999 bytes of 3-byte chars
+        assert_eq!(japanese.len(), 999);
+
+        // Truncate at 998 — falls in the middle of the 333rd character
+        let result = write_tee_file(&japanese, "test_utf8", tmpdir.path(), 998, 20);
+        assert!(result.is_some());
+
+        let path = result.unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("--- truncated at 998 bytes ---"));
+        // Should contain 332 full characters (996 bytes), not panic
+        assert!(content.starts_with(&"\u{6F22}".repeat(332)));
+    }
+
+    #[test]
+    fn test_write_tee_file_truncation_emoji() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        // Emoji are 4 bytes each in UTF-8
+        let emojis = "\u{1F600}".repeat(100); // 400 bytes
+        assert_eq!(emojis.len(), 400);
+
+        // Truncate at 201 — falls mid-emoji (4-byte boundary is at 200, 204)
+        let result = write_tee_file(&emojis, "test_emoji", tmpdir.path(), 201, 20);
+        assert!(result.is_some());
+
+        let path = result.unwrap();
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains("--- truncated at 201 bytes ---"));
+        // The emoji portion should be exactly 200 bytes (50 emojis),
+        // rounded down from 201 to the nearest char boundary
+        let target = "\u{1F600}".repeat(50);
+        assert!(content.starts_with(&target));
+    }
+
+    #[test]
     fn test_cleanup_old_files() {
         let tmpdir = tempfile::tempdir().unwrap();
         let dir = tmpdir.path();
@@ -398,5 +491,37 @@ directory = "/tmp/rtk-tee"
 
         let mode: TeeMode = serde_json::from_str(r#""never""#).unwrap();
         assert_eq!(mode, TeeMode::Never);
+    }
+
+    #[test]
+    fn test_force_tee_hint_skip_empty() {
+        let hint = force_tee_hint("", "test_cmd");
+        assert!(hint.is_none(), "Should skip empty content");
+    }
+
+    #[test]
+    fn test_force_tee_hint_respects_env_disable() {
+        // When RTK_TEE=0, force_tee_hint should return None
+        std::env::set_var("RTK_TEE", "0");
+        let large_output = "x".repeat(1000);
+        let hint = force_tee_hint(&large_output, "test_cmd");
+        std::env::remove_var("RTK_TEE");
+        assert!(hint.is_none(), "Should respect RTK_TEE=0");
+    }
+
+    #[test]
+    fn test_force_tee_tail_hint_skip_empty() {
+        let hint = force_tee_tail_hint("", "test_cmd", 22);
+        assert!(hint.is_none(), "Should skip empty content");
+    }
+
+    #[test]
+    fn test_force_tee_tail_hint_format() {
+        let path = std::path::PathBuf::from("/tmp/rtk/tee/123_docker_images.log");
+        let display = display_path(&path);
+        let hint = format!("[see remaining: tail -n +{} {}]", 22, display);
+        assert!(hint.starts_with("[see remaining: tail -n +22 "));
+        assert!(hint.ends_with(']'));
+        assert!(hint.contains("123_docker_images.log"));
     }
 }

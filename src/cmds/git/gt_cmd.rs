@@ -1,6 +1,8 @@
 //! Filters Graphite (gt) CLI output for stacking workflows.
 
+use crate::core::stream::exec_capture;
 use crate::core::tracking;
+use crate::core::truncate::{reduced, CAP_LIST};
 use crate::core::utils::{ok_confirmation, resolved_command, strip_ansi, truncate};
 use anyhow::{Context, Result};
 use lazy_static::lazy_static;
@@ -25,7 +27,7 @@ fn run_gt_filtered(
     verbose: u8,
     tee_label: &str,
     filter_fn: fn(&str) -> String,
-) -> Result<()> {
+) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
     let mut cmd = resolved_command("gt");
@@ -41,34 +43,30 @@ fn run_gt_filtered(
         eprintln!("Running: gt {} {}", subcmd_str, args.join(" "));
     }
 
-    let cmd_output = cmd.output().with_context(|| {
+    let cmd_output = exec_capture(&mut cmd).with_context(|| {
         format!(
             "Failed to run gt {}. Is gt (Graphite) installed?",
             subcmd_str
         )
     })?;
 
-    let stdout = String::from_utf8_lossy(&cmd_output.stdout);
-    let stderr = String::from_utf8_lossy(&cmd_output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
+    let raw = format!("{}\n{}", cmd_output.stdout, cmd_output.stderr);
 
-    let exit_code = cmd_output.status.code().unwrap_or(1);
-
-    let clean = strip_ansi(stdout.trim());
+    let clean = strip_ansi(cmd_output.stdout.trim());
     let output = if verbose > 0 {
         clean.clone()
     } else {
         filter_fn(&clean)
     };
 
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, tee_label, exit_code) {
+    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, tee_label, cmd_output.exit_code) {
         println!("{}\n{}", output, hint);
     } else {
         println!("{}", output);
     }
 
-    if !stderr.trim().is_empty() {
-        eprintln!("{}", stderr.trim());
+    if !cmd_output.stderr.trim().is_empty() {
+        eprintln!("{}", cmd_output.stderr.trim());
     }
 
     let label = if args.is_empty() {
@@ -79,18 +77,14 @@ fn run_gt_filtered(
     let rtk_label = format!("rtk {}", label);
     timer.track(&label, &rtk_label, &raw, &output);
 
-    if !cmd_output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
+    Ok(cmd_output.exit_code)
 }
 
 fn filter_identity(input: &str) -> String {
     input.to_string()
 }
 
-pub fn run_log(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_log(args: &[String], verbose: u8) -> Result<i32> {
     match args.first().map(|s| s.as_str()) {
         Some("short") => run_gt_filtered(
             &["log", "short"],
@@ -110,27 +104,27 @@ pub fn run_log(args: &[String], verbose: u8) -> Result<()> {
     }
 }
 
-pub fn run_submit(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_submit(args: &[String], verbose: u8) -> Result<i32> {
     run_gt_filtered(&["submit"], args, verbose, "gt_submit", filter_gt_submit)
 }
 
-pub fn run_sync(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_sync(args: &[String], verbose: u8) -> Result<i32> {
     run_gt_filtered(&["sync"], args, verbose, "gt_sync", filter_gt_sync)
 }
 
-pub fn run_restack(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_restack(args: &[String], verbose: u8) -> Result<i32> {
     run_gt_filtered(&["restack"], args, verbose, "gt_restack", filter_gt_restack)
 }
 
-pub fn run_create(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_create(args: &[String], verbose: u8) -> Result<i32> {
     run_gt_filtered(&["create"], args, verbose, "gt_create", filter_gt_create)
 }
 
-pub fn run_branch(args: &[String], verbose: u8) -> Result<()> {
+pub fn run_branch(args: &[String], verbose: u8) -> Result<i32> {
     run_gt_filtered(&["branch"], args, verbose, "gt_branch", filter_identity)
 }
 
-pub fn run_other(args: &[OsString], verbose: u8) -> Result<()> {
+pub fn run_other(args: &[OsString], verbose: u8) -> Result<i32> {
     if args.is_empty() {
         anyhow::bail!("gt: no subcommand specified");
     }
@@ -169,41 +163,14 @@ pub fn run_other(args: &[OsString], verbose: u8) -> Result<()> {
     }
 }
 
-fn passthrough_gt(subcommand: &str, args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
-    let mut cmd = resolved_command("gt");
-    cmd.arg(subcommand);
-    for arg in args {
-        cmd.arg(arg);
-    }
-
-    if verbose > 0 {
-        eprintln!("Running: gt {} {}", subcommand, args.join(" "));
-    }
-
-    let status = cmd
-        .status()
-        .with_context(|| format!("Failed to run gt {}", subcommand))?;
-
-    let args_str = if args.is_empty() {
-        subcommand.to_string()
-    } else {
-        format!("{} {}", subcommand, args.join(" "))
-    };
-    timer.track_passthrough(
-        &format!("gt {}", args_str),
-        &format!("rtk gt {} (passthrough)", args_str),
-    );
-
-    if !status.success() {
-        std::process::exit(status.code().unwrap_or(1));
-    }
-
-    Ok(())
+fn passthrough_gt(subcommand: &str, args: &[String], verbose: u8) -> Result<i32> {
+    let mut os_args: Vec<OsString> = vec![OsString::from(subcommand)];
+    os_args.extend(args.iter().map(OsString::from));
+    crate::core::runner::run_passthrough("gt", &os_args, verbose)
 }
 
-const MAX_LOG_ENTRIES: usize = 15;
+// gt log entries are multi-line — trim the list cap to keep token savings above 60%.
+const MAX_LOG_ENTRIES: usize = reduced(CAP_LIST, 5);
 
 fn filter_gt_log_entries(input: &str) -> String {
     let trimmed = input.trim();

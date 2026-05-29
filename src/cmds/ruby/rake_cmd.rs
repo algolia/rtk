@@ -4,9 +4,12 @@
 //! `rails test`, filtering down to failures/errors and the summary line.
 //! Uses `ruby_exec("rake")` to auto-detect `bundle exec`.
 
-use crate::core::tracking;
-use crate::core::utils::{exit_code_from_output, ruby_exec, strip_ansi};
-use anyhow::{Context, Result};
+use crate::core::runner;
+use crate::core::truncate::CAP_WARNINGS;
+use crate::core::utils::{ruby_exec, strip_ansi};
+use anyhow::Result;
+
+const MAX_RAKE_FAILURES: usize = CAP_WARNINGS;
 
 /// Decide whether to use `rake test` or `rails test` based on args.
 ///
@@ -46,9 +49,7 @@ fn looks_like_test_path(arg: &str) -> bool {
         || path.contains("_spec.rb")
 }
 
-pub fn run(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
+pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     let (tool, effective_args) = select_runner(args);
     let mut cmd = ruby_exec(tool);
     for arg in &effective_args {
@@ -63,39 +64,13 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         );
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to run rake. Is it installed? Try: gem install rake")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let filtered = filter_minitest_output(&raw);
-
-    let exit_code = exit_code_from_output(&output, "rake");
-    if let Some(hint) = crate::core::tee::tee_and_hint(&raw, "rake", exit_code) {
-        println!("{}\n{}", filtered, hint);
-    } else {
-        println!("{}", filtered);
-    }
-
-    if !stderr.trim().is_empty() && verbose > 0 {
-        eprintln!("{}", stderr.trim());
-    }
-
-    timer.track(
-        &format!("rake {}", args.join(" ")),
-        &format!("rtk rake {}", args.join(" ")),
-        &raw,
-        &filtered,
-    );
-
-    if !output.status.success() {
-        std::process::exit(exit_code);
-    }
-
-    Ok(())
+    runner::run_filtered(
+        cmd,
+        "rake",
+        &args.join(" "),
+        filter_minitest_output,
+        runner::RunOptions::with_tee("rake"),
+    )
 }
 
 #[derive(Debug, PartialEq)]
@@ -226,7 +201,7 @@ fn build_minitest_summary(summary: &str, failures: &[String]) -> String {
 
     result.push('\n');
 
-    for (i, failure) in failures.iter().take(10).enumerate() {
+    for (i, failure) in failures.iter().take(MAX_RAKE_FAILURES).enumerate() {
         let lines: Vec<&str> = failure.lines().collect();
         // First line is like "  1) Failure:" or "  1) Error:"
         if let Some(header) = lines.first() {
@@ -242,13 +217,16 @@ fn build_minitest_summary(summary: &str, failures: &[String]) -> String {
                 ));
             }
         }
-        if i < failures.len().min(10) - 1 {
+        if i < failures.len().min(MAX_RAKE_FAILURES) - 1 {
             result.push('\n');
         }
     }
 
-    if failures.len() > 10 {
-        result.push_str(&format!("\n... +{} more failures\n", failures.len() - 10));
+    if failures.len() > MAX_RAKE_FAILURES {
+        result.push_str(&format!(
+            "\n... +{} more failures\n",
+            failures.len() - MAX_RAKE_FAILURES
+        ));
     }
 
     result.trim().to_string()

@@ -1,17 +1,16 @@
 //! Filters Ruff linter and formatter output.
 
 use crate::core::config;
-use crate::core::tracking;
+use crate::core::runner;
+use crate::core::truncate::CAP_WARNINGS;
 use crate::core::utils::{resolved_command, truncate};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 struct RuffLocation {
-    #[allow(dead_code)]
     row: usize,
-    #[allow(dead_code)]
     column: usize,
 }
 
@@ -24,9 +23,7 @@ struct RuffFix {
 #[derive(Debug, Deserialize)]
 struct RuffDiagnostic {
     code: String,
-    #[allow(dead_code)]
     message: String,
-    #[allow(dead_code)]
     location: RuffLocation,
     #[allow(dead_code)]
     end_location: Option<RuffLocation>,
@@ -34,10 +31,7 @@ struct RuffDiagnostic {
     fix: Option<RuffFix>,
 }
 
-pub fn run(args: &[String], verbose: u8) -> Result<()> {
-    let timer = tracking::TimedExecution::start();
-
-    // Detect subcommand: check, format, or version
+pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     let is_check = args.is_empty()
         || args[0] == "check"
         || (!args[0].starts_with('-') && args[0] != "format" && args[0] != "version");
@@ -47,14 +41,12 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
     let mut cmd = resolved_command("ruff");
 
     if is_check {
-        // Force JSON output for check command
         if !args.contains(&"--output-format".to_string()) {
             cmd.arg("check").arg("--output-format=json");
         } else {
             cmd.arg("check");
         }
 
-        // Add user arguments (skip "check" if it was the first arg)
         let start_idx = if !args.is_empty() && args[0] == "check" {
             1
         } else {
@@ -64,7 +56,6 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
             cmd.arg(arg);
         }
 
-        // Default to current directory if no path specified
         if args
             .iter()
             .skip(start_idx)
@@ -73,7 +64,6 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
             cmd.arg(".");
         }
     } else {
-        // Format or other commands - pass through
         for arg in args {
             cmd.arg(arg);
         }
@@ -83,38 +73,21 @@ pub fn run(args: &[String], verbose: u8) -> Result<()> {
         eprintln!("Running: ruff {}", args.join(" "));
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to run ruff. Is it installed? Try: pip install ruff")?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let raw = format!("{}\n{}", stdout, stderr);
-
-    let filtered = if is_check && !stdout.trim().is_empty() {
-        filter_ruff_check_json(&stdout)
-    } else if is_format {
-        filter_ruff_format(&raw)
-    } else {
-        // Fallback for other commands (version, etc.)
-        raw.trim().to_string()
-    };
-
-    println!("{}", filtered);
-
-    timer.track(
-        &format!("ruff {}", args.join(" ")),
-        &format!("rtk ruff {}", args.join(" ")),
-        &raw,
-        &filtered,
-    );
-
-    // Preserve exit code for CI/CD
-    if !output.status.success() {
-        std::process::exit(output.status.code().unwrap_or(1));
-    }
-
-    Ok(())
+    runner::run_filtered(
+        cmd,
+        "ruff",
+        &args.join(" "),
+        move |stdout| {
+            if is_check && !stdout.trim().is_empty() {
+                filter_ruff_check_json(stdout)
+            } else if is_format {
+                filter_ruff_format(stdout)
+            } else {
+                stdout.trim().to_string()
+            }
+        },
+        runner::RunOptions::stdout_only(),
+    )
 }
 
 /// Filter ruff check JSON output - group by rule and file
@@ -177,9 +150,11 @@ pub fn filter_ruff_check_json(output: &str) -> String {
     let mut rule_counts: Vec<_> = by_rule.iter().collect();
     rule_counts.sort_by(|a, b| b.1.cmp(a.1));
 
+    const MAX_RUFF_RULES: usize = CAP_WARNINGS;
+    const MAX_RUFF_FILES: usize = CAP_WARNINGS;
     if !rule_counts.is_empty() {
         result.push_str("Top rules:\n");
-        for (rule, count) in rule_counts.iter().take(10) {
+        for (rule, count) in rule_counts.iter().take(MAX_RUFF_RULES) {
             result.push_str(&format!("  {} ({}x)\n", rule, count));
         }
         result.push('\n');
@@ -187,7 +162,7 @@ pub fn filter_ruff_check_json(output: &str) -> String {
 
     // Show top files
     result.push_str("Top files:\n");
-    for (file, count) in file_counts.iter().take(10) {
+    for (file, count) in file_counts.iter().take(MAX_RUFF_FILES) {
         let short_path = compact_path(file);
         result.push_str(&format!("  {} ({} issues)\n", short_path, count));
 
@@ -205,8 +180,43 @@ pub fn filter_ruff_check_json(output: &str) -> String {
         }
     }
 
-    if file_counts.len() > 10 {
-        result.push_str(&format!("\n... +{} more files\n", file_counts.len() - 10));
+    if file_counts.len() > MAX_RUFF_FILES {
+        result.push_str(&format!(
+            "\n... +{} more files\n",
+            file_counts.len() - MAX_RUFF_FILES
+        ));
+    }
+
+    const MAX_VIOLATIONS: usize = 50;
+    let violation_lines: Vec<String> = diagnostics
+        .iter()
+        .map(|diag| {
+            format!(
+                "  {}:{}:{} {} {}\n",
+                compact_path(&diag.filename),
+                diag.location.row,
+                diag.location.column,
+                diag.code,
+                truncate(diag.message.trim(), 100),
+            )
+        })
+        .collect();
+
+    result.push_str("\nViolations:\n");
+    for line in violation_lines.iter().take(MAX_VIOLATIONS) {
+        result.push_str(line);
+    }
+    if violation_lines.len() > MAX_VIOLATIONS {
+        result.push_str(&format!(
+            "  … +{} more\n",
+            violation_lines.len() - MAX_VIOLATIONS
+        ));
+        let full: String = violation_lines.concat();
+        if let Some(hint) =
+            crate::core::tee::force_tee_tail_hint(&full, "ruff-check", MAX_VIOLATIONS + 1)
+        {
+            result.push_str(&format!("  {}\n", hint));
+        }
     }
 
     if fixable_count > 0 {
@@ -280,14 +290,19 @@ pub fn filter_ruff_format(output: &str) -> String {
             ));
             result.push_str("═══════════════════════════════════════\n");
 
-            for (i, file) in files_to_format.iter().take(10).enumerate() {
+            const MAX_RUFF_FORMAT_FILES: usize = CAP_WARNINGS;
+            for (i, file) in files_to_format
+                .iter()
+                .take(MAX_RUFF_FORMAT_FILES)
+                .enumerate()
+            {
                 result.push_str(&format!("{}. {}\n", i + 1, compact_path(file)));
             }
 
-            if files_to_format.len() > 10 {
+            if files_to_format.len() > MAX_RUFF_FORMAT_FILES {
                 result.push_str(&format!(
                     "\n... +{} more files\n",
-                    files_to_format.len() - 10
+                    files_to_format.len() - MAX_RUFF_FORMAT_FILES
                 ));
             }
 
@@ -370,6 +385,8 @@ mod tests {
         assert!(result.contains("E501"));
         assert!(result.contains("main.py"));
         assert!(result.contains("utils.py"));
+        assert!(result.contains("Violations:"), "Violations section missing");
+        assert!(result.contains("1:8"), "line:col location missing");
     }
 
     #[test]
@@ -390,6 +407,39 @@ Would reformat: tests/test_utils.py
         assert!(result.contains("main.py"));
         assert!(result.contains("test_utils.py"));
         assert!(result.contains("3 files already formatted"));
+    }
+
+    #[test]
+    fn test_filter_ruff_check_caps_violations_and_emits_hint() {
+        // Mirror ruff's pretty-printed JSON shape so the input-vs-output
+        // comparison reflects what a real `ruff check --output-format=json` emits.
+        let mut diags = Vec::new();
+        for i in 0..200 {
+            diags.push(format!(
+                "  {{\n    \"code\": \"F401\",\n    \"message\": \"`module_{i}` imported but unused\",\n    \"location\": {{\"row\": {i}, \"column\": 4}},\n    \"end_location\": {{\"row\": {i}, \"column\": 20}},\n    \"filename\": \"/Users/dev/project/src/feature_{i}.py\",\n    \"fix\": null\n  }}"
+            ));
+        }
+        let json = format!("[\n{}\n]", diags.join(",\n"));
+        let result = filter_ruff_check_json(&json);
+
+        let in_section = result.split("Violations:").nth(1).unwrap_or("");
+        let listed = in_section
+            .lines()
+            .filter(|l| l.trim().starts_with("src/"))
+            .count();
+        assert!(listed <= 50, "violations cap not enforced: got {listed}");
+        assert!(
+            result.contains("… +150 more"),
+            "missing '+N more' indicator"
+        );
+
+        let raw_tokens = json.split_whitespace().count();
+        let out_tokens = result.split_whitespace().count();
+        let savings = 100.0 - (out_tokens as f64 / raw_tokens as f64) * 100.0;
+        assert!(
+            savings >= 60.0,
+            "token savings dropped below 60%: {savings:.1}%"
+        );
     }
 
     #[test]
