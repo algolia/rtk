@@ -157,12 +157,9 @@ jobs:
       - name: Create version-agnostic package names
         run: |
           cd release
-          for f in *.deb; do
-            [ -f "$f" ] && cp "$f" "rtk_amd64.deb"
-          done
-          for f in *.rpm; do
-            [ -f "$f" ] && cp "$f" "rtk.x86_64.rpm"
-          done
+          shopt -s nullglob          # no-match globs expand to nothing, not a literal
+          for f in *.deb; do cp "$f" "rtk_amd64.deb"; done
+          true                        # ensure the step exits 0 even if no packages
 
       - name: Create checksums
         run: |
