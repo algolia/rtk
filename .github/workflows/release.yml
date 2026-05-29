@@ -217,6 +217,50 @@ jobs:
           prerelease: ${{ inputs.prerelease }}
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Verify release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          required=(
+            rtk-x86_64-apple-darwin.tar.gz
+            rtk-aarch64-apple-darwin.tar.gz
+            rtk-x86_64-unknown-linux-musl.tar.gz
+            rtk-aarch64-unknown-linux-gnu.tar.gz
+            rtk-x86_64-pc-windows-msvc.zip
+            checksums.txt
+          )
+          assets=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets[].name')
+          echo "Uploaded assets:"
+          echo "$assets"
+          missing=0
+          for name in "${required[@]}"; do
+            if ! echo "$assets" | grep -qx "$name"; then
+              echo "::error::Missing required asset: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::Release $TAG is missing required assets — install.sh would 404"
+            exit 1
+          fi
+
+      - name: Smoke test release download
+        env:
+          TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          # Verify the freshly uploaded Linux binary is actually reachable and runs.
+          # We pin the tag (not /releases/latest) because prereleases and not-yet-promoted
+          # tags are invisible to that endpoint.
+          url="https://github.com/${{ github.repository }}/releases/download/${TAG}/rtk-x86_64-unknown-linux-musl.tar.gz"
+          echo "Downloading: $url"
+          tmp=$(mktemp -d)
+          curl -fsSL "$url" -o "$tmp/rtk.tar.gz"
+          tar -xzf "$tmp/rtk.tar.gz" -C "$tmp"
+          "$tmp/rtk" --version
+
   notify-discord:
     name: Notify Discord
     needs: [release]

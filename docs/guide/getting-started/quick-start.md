@@ -40,7 +40,7 @@ To see exactly what `init` would change before it touches anything, add `--dry-r
 rtk init --global --dry-run
 ```
 
-Every would-be file create/update/patch is printed with a `[dry-run] would ...` prefix, then a `[dry-run] Nothing written.` footer. Nothing on disk is modified, no settings.json is patched, and the telemetry consent prompt is skipped. Combine with `-v` to also print the full content RTK would write:
+Every would-be file create/update/patch is printed with a `[dry-run] would ...` prefix, then a `[dry-run] Nothing written.` footer. Nothing on disk is modified and no settings.json is patched. Combine with `-v` to also print the full content RTK would write:
 
 ```bash
 rtk init --global --dry-run -v

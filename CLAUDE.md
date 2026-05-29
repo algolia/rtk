@@ -11,12 +11,12 @@ This is a fork with critical fixes for git argument parsing and modern JavaScrip
 ### Name Collision Warning
 
 **Two different "rtk" projects exist:**
-- This project: Rust Token Killer (rtk-ai/rtk)
+- This project: Rust Token Killer (algolia/rtk)
 - reachingforthejack/rtk: Rust Type Kit (DIFFERENT - generates Rust types)
 
 **Verify correct installation:**
 ```bash
-rtk --version  # Should show "rtk 0.28.2" (or newer)
+rtk --version  # Should show "rtk 0.42.x-algolia.y" (or newer)
 rtk gain       # Should show token savings stats (NOT "command not found")
 ```
 
@@ -71,11 +71,9 @@ rtk uses a **command proxy architecture**: `main.rs` routes CLI commands via a C
 
 For the full architecture, component details, and module development patterns, see:
 - [ARCHITECTURE.md](docs/contributing/ARCHITECTURE.md) — System design, module organization, filtering strategies, error handling
-- [docs/contributing/TECHNICAL.md](docs/contributing/TECHNICAL.md) — End-to-end flow, folder map, hook system, filter pipeline
+- [docs/TECHNICAL.md](docs/contributing/TECHNICAL.md) — End-to-end flow, folder map, hook system, filter pipeline
 
 Module responsibilities are documented in each folder's `README.md` and each file's `//!` doc header. Browse `src/cmds/*/` to discover available filters.
-
-Supported ecosystems: git/gh/gt, cargo, go/golangci-lint, npm/pnpm/npx, ruff/pytest/pip/mypy, rspec/rubocop/rake, dotnet, playwright/vitest/jest, docker/kubectl/aws.
 
 ### Proxy Mode
 
@@ -159,6 +157,72 @@ git branch  # Verify correct branch (main, feature/*, etc.)
 - "Should I research X external API behavior?" → ASK if it requires >3 commands
 - "Should I test Y edge case?" → ASK if not mentioned in requirements
 - "Should I verify Z across N platforms?" → ASK if N > 2
+
+## Fork Hygiene (Mandatory)
+
+This is the **Algolia fork** (`algolia/rtk`), not the upstream (`rtk-ai/rtk`). Upstream references leak in during rebases and releases. **Every rebase and every release MUST include a fork hygiene check.**
+
+### Pre-commit Checklist (after rebase or before release)
+
+Run the hygiene gate — it catches every known leak class (repo slug, website,
+email, Homebrew, stale version strings, telemetry residue in docs/source, dead
+links to deleted telemetry docs):
+
+```bash
+scripts/fork-hygiene.sh          # CHECK only — exit 1 on any leak
+scripts/fork-hygiene.sh --fix    # auto-fix the deterministic ones, then CHECK
+```
+
+**Zero matches required.** `--fix` handles repo/website/email/brew/version
+mechanically; telemetry scrub, legal text (LICENSE/CLA), and code-comment
+provenance are left for manual judgment (see the script header).
+
+### Banned Patterns in User-Facing Docs
+
+| Pattern | Why | Replace With |
+|---------|-----|--------------|
+| `brew install rtk` | No Homebrew tap for fork | `cargo install --git https://github.com/algolia/rtk` or `curl \| sh` |
+| `https://www.rtk-ai.app` | Upstream website | Remove or use `https://github.com/algolia/rtk` |
+| `contact@rtk-ai.app` | Upstream email | `#proj-internal-skills` on Slack |
+| `rtk-ai/rtk` in install instructions | Upstream repo | `algolia/rtk` |
+| `brew uninstall rtk` | No Homebrew install exists | `cargo uninstall rtk` |
+| Hardcoded version strings (`"rtk 0.28.2"`) | Goes stale on every release | Use current `Cargo.toml` version |
+
+### Where to Check
+
+All `README*.md`, `INSTALL.md`, `CLAUDE.md`, `openclaw/README.md`, `Formula/rtk.rb`, GitHub repo metadata (`gh repo edit --homepage`).
+
+### On Release
+
+1. Run `scripts/fork-hygiene.sh` — fix any matches
+2. Update version strings in docs to match `Cargo.toml`
+3. Verify `gh repo view --json homepageUrl` returns empty (not upstream URL)
+
+## Upstream Catchup Procedure
+
+Full realignment, **not** cherry-picks. Default target is `upstream/master`
+(latest stable tag), not `develop`. Result is one squashed commit on top of the
+upstream tag (see `git log` for prior `fork: upstream catchup ...` commits).
+
+1. **Fetch + measure**: `git fetch upstream --tags`; compare `main..upstream/master`.
+2. **Branch from the tag**: `git checkout -b fork/upstream-realign-vX.Y.Z upstream/master`.
+3. **Toolchain**: upstream needs a modern cargo (edition2024 deps). If system
+   `cargo` is old, use the rustup shim: `~/.cargo/bin/cargo` (run `rustup update stable` first).
+4. **Strip telemetry** (hard rule): delete `src/core/telemetry*.rs` + telemetry docs;
+   remove the `[telemetry]` config, `rtk telemetry` command + consent flow, `maybe_ping()`,
+   and the `ureq` dep. Then `cargo check` and delete whatever stat helpers it reports as
+   newly-dead (they only fed telemetry). Keep local SQLite tracking (`gain`/`discover`).
+5. **Re-apply fork code fixes**: diff our patches in isolation with
+   `git diff <prev-base-tag>..main -- src/` to see what's ours; re-apply anything
+   upstream hasn't absorbed (currently: `registry.rs` shell-function + curl/wget pipe skips).
+6. **Identity**: `scripts/fork-hygiene.sh --fix`, then scrub any telemetry residue
+   from docs by hand. Restore fork-specific `CLAUDE.md` from the old `main` if the
+   branch switch replaced it; fix its doc-links to the current layout.
+7. **Re-apply CI guards**: release-asset verification + `main`-branch triggers (see `release.yml`/`cd.yml`).
+8. **Version**: `Cargo.toml` → `X.Y.Z-algolia.N`; keep `.release-please-manifest.json`
+   at the upstream base `X.Y.Z`; add a `CHANGELOG.md` fork entry.
+9. **Gate**: `cargo fmt --all && cargo clippy --all-targets && cargo test --all`
+   and `scripts/fork-hygiene.sh`. All green → squash-commit → tag `vX.Y.Z-algolia.N`.
 
 ## Plan Execution Protocol
 

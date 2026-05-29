@@ -15,7 +15,7 @@ if ! command -v jq &>/dev/null; then
 fi
 
 if ! command -v rtk &>/dev/null; then
-  echo "[rtk] WARNING: rtk is not installed or not in PATH. Hook cannot rewrite commands. Install: https://github.com/rtk-ai/rtk#installation" >&2
+  echo "[rtk] WARNING: rtk is not installed or not in PATH. Hook cannot rewrite commands. Install: https://github.com/algolia/rtk#installation" >&2
   exit 0
 fi
 

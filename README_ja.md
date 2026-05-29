@@ -7,15 +7,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rtk-ai/rtk/actions"><img src="https://github.com/rtk-ai/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
-  <a href="https://github.com/rtk-ai/rtk/releases"><img src="https://img.shields.io/github/v/release/rtk-ai/rtk" alt="Release"></a>
+  <a href="https://github.com/algolia/rtk/actions"><img src="https://github.com/algolia/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
+  <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1478373640461488159?label=Discord&logo=discord" alt="Discord"></a>
   <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">ウェブサイト</a> &bull;
+  <a href="https://github.com/algolia/rtk">ウェブサイト</a> &bull;
   <a href="#インストール">インストール</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">トラブルシューティング</a> &bull;
   <a href="docs/contributing/ARCHITECTURE.md">アーキテクチャ</a> &bull;
@@ -51,19 +51,19 @@ rtk はコマンド出力を LLM コンテキストに届く前にフィルタ�
 ### Homebrew（推奨）
 
 ```bash
-brew install rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### クイックインストール（Linux/macOS）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
 ```
 
 ### Cargo
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### 確認
@@ -151,7 +151,7 @@ rtk discover                    # 見逃した節約機会を発見
 
 ## コントリビュート
 
-コントリビューション歓迎！[GitHub](https://github.com/rtk-ai/rtk) で issue または PR を作成してください。
+コントリビューション歓迎！[GitHub](https://github.com/algolia/rtk) で issue または PR を作成してください。
 
 [Discord](https://discord.gg/RySmvNF5kF) コミュニティに参加。
 

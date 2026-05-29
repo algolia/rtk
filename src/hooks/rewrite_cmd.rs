@@ -86,7 +86,7 @@ mod tests {
     /// CRITICAL: PermissionVerdict::Default MUST map to exit 3 (ask), NOT exit 0.
     /// If Default were mapped to exit 0, any command without an explicit permission
     /// rule would be auto-allowed — bypassing Claude Code's least-privilege default.
-    /// See: https://github.com/rtk-ai/rtk/issues/1155
+    /// See: upstream issue #1155
     mod exit_code_protocol {
         use super::registry;
         use crate::hooks::permissions::{check_command_with_rules, PermissionVerdict};

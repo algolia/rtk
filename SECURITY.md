@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in RTK, please report it to the maintainers privately:
 
-- **Email**: security@rtk-ai.app (or create a private security advisory on GitHub)
+- **Email**: #proj-internal-skills (Slack) (or create a private security advisory on GitHub)
 - **Response time**: We aim to acknowledge reports within 48 hours
 - **Disclosure**: We follow responsible disclosure practices (90-day embargo)
 
@@ -21,7 +21,7 @@ RTK is a CLI tool that executes shell commands and handles user input. PRs from 
 - **Shell injection** (command execution vulnerabilities)
 - **Supply chain attacks** (malicious dependencies)
 - **Backdoors** (logic bombs, exfiltration code)
-- **Data leaks** (tracking.db exposure, telemetry abuse)
+- **Data leaks** (tracking.db exposure)
 
 ---
 
@@ -50,7 +50,7 @@ The following files are considered **high-risk** and trigger mandatory 2-reviewe
 ### Tier 1: Shell Execution & System Interaction
 - **`src/runner.rs`** - Shell command execution engine (primary injection vector)
 - **`src/summary.rs`** - Command output aggregation (data exfiltration risk)
-- **`src/tracking.rs`** - SQLite database operations (privacy/telemetry concerns)
+- **`src/tracking.rs`** - SQLite database operations (privacy concerns)
 - **`src/discover/registry.rs`** - Rewrite logic for all commands (command injection risk via rewrite rules)
 - **`hooks/rtk-rewrite.sh`** / **`.claude/hooks/rtk-rewrite.sh`** - Thin delegator hook (executes in Claude Code context, intercepts all commands)
 
@@ -114,7 +114,7 @@ bash scripts/detect-dangerous-patterns.sh /tmp/pr.diff
 | `SystemTime::now() > ...` | Logic bombs | Delayed malicious behavior |
 | Base64/hex strings | Obfuscation | Hides malicious URLs/commands |
 
-See [Dangerous Patterns Reference](https://github.com/rtk-ai/rtk/wiki/Dangerous-Patterns) for exploitation examples.
+See [Dangerous Patterns Reference](https://github.com/algolia/rtk/wiki/Dangerous-Patterns) for exploitation examples.
 
 ---
 
@@ -208,8 +208,8 @@ Critical vulnerabilities (remote code execution, data exfiltration) may be fast-
 
 ## Contact
 
-- **Security issues**: security@rtk-ai.app
-- **General questions**: https://github.com/rtk-ai/rtk/discussions
+- **Security issues**: #proj-internal-skills (Slack)
+- **General questions**: https://github.com/algolia/rtk/discussions
 - **Maintainers**: @FlorianBruniaux (active fork maintainer)
 
 ---

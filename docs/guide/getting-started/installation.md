@@ -11,7 +11,7 @@ sidebar:
 
 Two unrelated projects share the name `rtk`. Make sure you install the right one:
 
-- **Rust Token Killer** (`rtk-ai/rtk`) — this project, a token-saving CLI proxy
+- **Rust Token Killer** (`algolia/rtk`) — this project, a token-saving CLI proxy
 - **Rust Type Kit** (`reachingforthejack/rtk`) — a different tool for generating Rust types
 
 The easiest way to verify you have the correct one: run `rtk gain`. It should display token savings stats. If it returns "command not found", you either have the wrong package or RTK is not installed.
@@ -28,13 +28,13 @@ If both commands work, RTK is already installed. Skip to [Project initialization
 ## Quick install (Linux and macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/master/install.sh | sh
 ```
 
 ## Homebrew (macOS and Linux)
 
 ```bash
-brew install rtk-ai/tap/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ## Cargo
@@ -44,12 +44,12 @@ brew install rtk-ai/tap/rtk
 :::
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk rtk
+cargo install --git https://github.com/algolia/rtk rtk
 ```
 
 ## Pre-built binaries (Windows, Linux, macOS)
 
-Download from [GitHub releases](https://github.com/rtk-ai/rtk/releases):
+Download from [GitHub releases](https://github.com/algolia/rtk/releases):
 
 - macOS: `rtk-x86_64-apple-darwin.tar.gz` / `rtk-aarch64-apple-darwin.tar.gz`
 - Linux: `rtk-x86_64-unknown-linux-musl.tar.gz` / `rtk-aarch64-unknown-linux-gnu.tar.gz`
@@ -91,5 +91,5 @@ rtk init --global
 ```bash
 rtk init -g --uninstall    # remove hook, RTK.md, and settings.json entry
 cargo uninstall rtk         # remove binary (if installed via Cargo)
-brew uninstall rtk          # remove binary (if installed via Homebrew)
+cargo uninstall rtk          # remove binary (if installed via Homebrew)
 ```

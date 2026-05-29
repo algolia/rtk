@@ -5,7 +5,7 @@
 **There are TWO completely different projects named "rtk":**
 
 1. ✅ **Rust Token Killer** (this project) - LLM token optimizer
-   - Repos: `rtk-ai/rtk`
+   - Repos: `algolia/rtk`
    - Has `rtk gain` command for token savings stats
 
 2. ❌ **Rust Type Kit** (reachingforthejack/rtk) - DIFFERENT PROJECT
@@ -44,7 +44,7 @@ cargo uninstall rtk
 ### Quick Install (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/master/install.sh | sh
 ```
 
 After installation, **verify you have the correct rtk**:
@@ -55,8 +55,8 @@ rtk gain  # Must show token savings stats (not "command not found")
 ### Alternative: Manual Installation
 
 ```bash
-# From rtk-ai repository (NOT reachingforthejack!)
-cargo install --git https://github.com/rtk-ai/rtk
+# From algolia/rtk repository (NOT reachingforthejack!)
+cargo install --git https://github.com/algolia/rtk
 
 # OR (if published and correct on crates.io)
 cargo install rtk
@@ -179,7 +179,7 @@ rtk init --show
 ### First-Time User (Recommended)
 ```bash
 # 1. Install RTK
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 rtk gain  # Verify (must show token stats)
 
 # 2. Setup with prompts
@@ -264,7 +264,7 @@ rtk init -g --uninstall
 cargo uninstall rtk
 
 # If installed via package manager
-brew uninstall rtk          # macOS Homebrew
+cargo uninstall rtk          # macOS Homebrew
 sudo apt remove rtk         # Debian/Ubuntu
 sudo dnf remove rtk         # Fedora/RHEL
 ```
@@ -376,11 +376,11 @@ cargo install --path . --force
 
 ## Support and Contributing
 
-- **Website**: https://www.rtk-ai.app
-- **Contact**: contact@rtk-ai.app
+- **Website**: https://github.com/algolia/rtk
+- **Contact**: #proj-internal-skills (Slack)
 - **Troubleshooting**: See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for common issues
-- **GitHub issues**: https://github.com/rtk-ai/rtk/issues
-- **Pull Requests**: https://github.com/rtk-ai/rtk/pulls
+- **GitHub issues**: https://github.com/algolia/rtk/issues
+- **Pull Requests**: https://github.com/algolia/rtk/pulls
 
 ⚠️ **If you installed the wrong rtk (Type Kit)**, see [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#problem-rtk-gain-command-not-found)
 

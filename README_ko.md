@@ -7,15 +7,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rtk-ai/rtk/actions"><img src="https://github.com/rtk-ai/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
-  <a href="https://github.com/rtk-ai/rtk/releases"><img src="https://img.shields.io/github/v/release/rtk-ai/rtk" alt="Release"></a>
+  <a href="https://github.com/algolia/rtk/actions"><img src="https://github.com/algolia/rtk/workflows/Security%20Check/badge.svg" alt="CI"></a>
+  <a href="https://github.com/algolia/rtk/releases"><img src="https://img.shields.io/github/v/release/algolia/rtk" alt="Release"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://discord.gg/RySmvNF5kF"><img src="https://img.shields.io/discord/1478373640461488159?label=Discord&logo=discord" alt="Discord"></a>
   <a href="https://formulae.brew.sh/formula/rtk"><img src="https://img.shields.io/homebrew/v/rtk" alt="Homebrew"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rtk-ai.app">웹사이트</a> &bull;
+  <a href="https://github.com/algolia/rtk">웹사이트</a> &bull;
   <a href="#설치">설치</a> &bull;
   <a href="docs/TROUBLESHOOTING.md">문제 해결</a> &bull;
   <a href="docs/contributing/ARCHITECTURE.md">아키텍처</a> &bull;
@@ -51,19 +51,19 @@ rtk는 명령 출력이 LLM 컨텍스트에 도달하기 전에 필터링하고 
 ### Homebrew (권장)
 
 ```bash
-brew install rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### 빠른 설치 (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
 ```
 
 ### Cargo
 
 ```bash
-cargo install --git https://github.com/rtk-ai/rtk
+cargo install --git https://github.com/algolia/rtk
 ```
 
 ### 확인
@@ -151,7 +151,7 @@ rtk discover                    # 놓친 절약 기회 발견
 
 ## 기여
 
-기여를 환영합니다! [GitHub](https://github.com/rtk-ai/rtk)에서 issue 또는 PR을 생성해 주세요.
+기여를 환영합니다! [GitHub](https://github.com/algolia/rtk)에서 issue 또는 PR을 생성해 주세요.
 
 [Discord](https://discord.gg/RySmvNF5kF) 커뮤니티에 참여하세요.
 

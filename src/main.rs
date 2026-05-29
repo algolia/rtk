@@ -580,12 +580,6 @@ enum Commands {
     /// Show RTK adoption across Claude Code sessions
     Session {},
 
-    /// Manage telemetry consent and data (RGPD/GDPR)
-    Telemetry {
-        #[command(subcommand)]
-        command: core::telemetry_cmd::TelemetrySubcommand,
-    },
-
     /// Learn CLI corrections from Claude Code error history
     Learn {
         /// Filter by project path (substring match)
@@ -1389,9 +1383,6 @@ where
 }
 
 fn run_cli() -> Result<i32> {
-    // Fire-and-forget telemetry ping (1/day, non-blocking)
-    core::telemetry::maybe_ping();
-
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) => {
@@ -2048,11 +2039,6 @@ fn run_cli() -> Result<i32> {
 
         Commands::Session {} => {
             analytics::session_cmd::run(cli.verbose)?;
-            0
-        }
-
-        Commands::Telemetry { command } => {
-            core::telemetry_cmd::run(&command)?;
             0
         }
 
@@ -3164,7 +3150,7 @@ mod tests {
 
     #[test]
     fn test_npx_unknown_tool_passthrough() {
-        // The bug (rtk-ai/rtk#815) was that unknown tools under `rtk npx`
+        // The bug (upstream #815) was that unknown tools under `rtk npx`
         // were dispatched to `npm` instead of `npx`. At the parse level, the
         // Npx variant must carry all args through unchanged so the dispatch
         // arm can forward them to npx.

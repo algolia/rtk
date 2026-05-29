@@ -33,7 +33,7 @@ const RTK_SLIM_CODEX: &str = include_str!("../../hooks/codex/rtk-awareness.md");
 /// Template written by `rtk init` when no filters.toml exists yet.
 const FILTERS_TEMPLATE: &str = r#"# Project-local RTK filters — commit this file with your repo.
 # Filters here override user-global and built-in filters.
-# Docs: https://github.com/rtk-ai/rtk#custom-filters
+# Docs: https://github.com/algolia/rtk#custom-filters
 schema_version = 1
 
 # Example: suppress build noise from a custom tool
@@ -49,7 +49,7 @@ schema_version = 1
 /// Template for user-global filters (~/.config/rtk/filters.toml).
 const FILTERS_GLOBAL_TEMPLATE: &str = r#"# User-global RTK filters — apply to all your projects.
 # Project-local .rtk/filters.toml takes precedence over these.
-# Docs: https://github.com/rtk-ai/rtk#custom-filters
+# Docs: https://github.com/algolia/rtk#custom-filters
 schema_version = 1
 
 # Example: suppress noise from a tool you use everywhere
@@ -324,10 +324,6 @@ pub fn run(
         }
     }
 
-    if !dry_run {
-        prompt_telemetry_consent()?;
-    }
-
     if dry_run {
         print_dry_run_footer();
     } else {
@@ -435,66 +431,6 @@ fn prompt_user_consent(settings_path: &Path) -> Result<bool> {
 
     let response = line.trim().to_lowercase();
     Ok(response == "y" || response == "yes")
-}
-
-pub fn save_telemetry_consent(accepted: bool) -> Result<()> {
-    let mut config = crate::core::config::Config::load().unwrap_or_default();
-    config.telemetry.consent_given = Some(accepted);
-    config.telemetry.enabled = accepted;
-    config.telemetry.consent_date = Some(chrono::Utc::now().to_rfc3339());
-    config
-        .save()
-        .context("Failed to save telemetry consent to config.toml")
-}
-
-fn prompt_telemetry_consent() -> Result<()> {
-    use std::io::{self, BufRead, IsTerminal};
-
-    let config = crate::core::config::Config::load().unwrap_or_default();
-    match config.telemetry.consent_given {
-        Some(true) => return Ok(()),
-        Some(false) => return Ok(()),
-        None => {}
-    }
-
-    if !io::stdin().is_terminal() {
-        return Ok(());
-    }
-
-    eprintln!();
-    eprintln!("--- Telemetry ---");
-    eprintln!("RTK collects anonymous usage metrics once per day to improve filters.");
-    eprintln!();
-    eprintln!("  What:    command names (not arguments), token savings, OS, version");
-    eprintln!("  Why:     prioritize filter development for the most-used commands");
-    eprintln!("  Who:     RTK AI Labs, contact@rtk-ai.app");
-    eprintln!("  Rights:  disable anytime with `rtk telemetry disable`,");
-    eprintln!("           request erasure with `rtk telemetry forget`");
-    eprintln!("  Details: https://github.com/rtk-ai/rtk/blob/master/docs/TELEMETRY.md");
-    eprintln!();
-    eprint!("Enable anonymous telemetry? [y/N] ");
-
-    let stdin = io::stdin();
-    let mut line = String::new();
-    stdin
-        .lock()
-        .read_line(&mut line)
-        .context("Failed to read user input")?;
-
-    let accepted = {
-        let response = line.trim().to_lowercase();
-        response == "y" || response == "yes"
-    };
-
-    save_telemetry_consent(accepted)?;
-
-    if accepted {
-        eprintln!("  Telemetry enabled. Disable anytime: rtk telemetry disable");
-    } else {
-        eprintln!("  Telemetry disabled.");
-    }
-
-    Ok(())
 }
 
 fn print_manual_instructions(hook_command: &str, include_opencode: bool) {
@@ -3691,7 +3627,7 @@ fn patch_gemini_settings(
     if patch_mode == PatchMode::Skip {
         println!(
             "\nManual setup needed: add RTK hook to {}\n\
-             See: https://github.com/rtk-ai/rtk#gemini-cli",
+             See: https://github.com/algolia/rtk#gemini-cli",
             settings_path.display()
         );
         return Ok(());

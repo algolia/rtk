@@ -1323,11 +1323,6 @@ mode = "failures"           # "failures" (defaut), "always", ou "never"
 max_files = 20              # Rotation : garder les N derniers fichiers
 # directory = "/custom/tee/path"  # Chemin personnalise (optionnel)
 
-[telemetry]
-enabled = false             # Telemetrie anonyme (1 ping/jour, requiert consentement)
-# consent_given = true      # Defini automatiquement par `rtk init` ou `rtk telemetry enable`
-# consent_date = "..."      # Date du consentement (RFC 3339)
-
 [hooks]
 exclude_commands = []       # Commandes a exclure de la recriture automatique
 ```
@@ -1337,7 +1332,6 @@ exclude_commands = []       # Commandes a exclure de la recriture automatique
 | Variable | Description |
 |----------|-------------|
 | `RTK_TEE_DIR` | Surcharge le repertoire tee |
-| `RTK_TELEMETRY_DISABLED=1` | Desactiver la telemetrie |
 | `RTK_HOOK_AUDIT=1` | Activer l'audit du hook |
 | `SKIP_ENV_VALIDATION=1` | Desactiver la validation d'env (Next.js, etc.) |
 
@@ -1370,31 +1364,6 @@ FAILED: 2/15 tests
 | `tee.max_files` | `20` | Rotation : garder les N derniers |
 | Taille min | 500 octets | Les sorties trop courtes ne sont pas sauvegardees |
 | Taille max fichier | 1 Mo | Troncature au-dela |
-
----
-
-## Telemetrie
-
-RTK peut envoyer un ping anonyme une fois par jour (23h d'intervalle) pour des statistiques d'utilisation. La telemetrie est **desactivee par defaut** et requiert un consentement explicite (RGPD Art. 6, 7).
-
-**Donnees envoyees :** hash de device (SHA-256 d'un sel aleatoire), version, OS, architecture, nombre de commandes/24h, top commandes, pourcentage d'economies.
-
-**Responsable du traitement :** `RTK AI Labs`, contact@rtk-ai.app
-
-**Gerer la telemetrie :**
-```bash
-rtk telemetry status     # Voir l'etat du consentement
-rtk telemetry enable     # Donner son consentement (prompt interactif)
-rtk telemetry disable    # Retirer son consentement
-rtk telemetry forget     # Retirer + supprimer donnees locales + demande d'effacement serveur
-```
-
-**Desactiver via variable d'environnement :**
-```bash
-export RTK_TELEMETRY_DISABLED=1
-```
-
-Aucune donnee personnelle, aucun contenu de commande, aucun chemin de fichier n'est transmis. Conservation serveur : 12 mois max. Details : [docs/TELEMETRY.md](../TELEMETRY.md)
 
 ---
 

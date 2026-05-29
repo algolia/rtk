@@ -369,7 +369,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install RTK
-        run: cargo install --git https://github.com/rtk-ai/rtk
+        run: cargo install --git https://github.com/algolia/rtk
 
       - name: Export weekly stats
         run: |
@@ -444,7 +444,7 @@ if __name__ == "__main__":
 ```rust
 // In your Cargo.toml
 // [dependencies]
-// rtk = { git = "https://github.com/rtk-ai/rtk" }
+// rtk = { git = "https://github.com/algolia/rtk" }
 
 use rtk::tracking::{Tracker, TimedExecution};
 use anyhow::Result;
@@ -538,8 +538,7 @@ let _ = conn.execute(
 
 ## Security & Privacy
 
-- **Local storage only**: Tracking database never leaves the machine
-- **Telemetry requires consent**: RTK can send a daily anonymous usage ping (version, OS, command counts, token savings). Disabled by default, requires explicit consent via `rtk init` or `rtk telemetry enable`. Manage with `rtk telemetry status/disable/forget`. Override: `RTK_TELEMETRY_DISABLED=1`
+- **Local storage only**: Tracking database never leaves the machine — nothing is ever transmitted off your device
 - **User control**: Users can delete `~/.local/share/rtk/tracking.db` anytime
 - **90-day retention**: Old data automatically purged
 

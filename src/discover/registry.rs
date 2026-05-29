@@ -473,6 +473,13 @@ pub fn rewrite_command(
         return None;
     }
 
+    // Shell function definitions — rewriting commands inside function bodies
+    // produces invalid references when the function is later called.
+    // Detect patterns like `name() {`, `function name {`, `name ()`.
+    if trimmed.contains("() {") || trimmed.contains("() \n") || trimmed.starts_with("function ") {
+        return None;
+    }
+
     let compiled = compile_exclude_patterns(excluded);
     let normalized_prefixes = normalize_transparent_prefixes(transparent_prefixes);
 
@@ -533,10 +540,18 @@ fn rewrite_compound(
             }
             TokenKind::Pipe => {
                 let seg = cmd[seg_start..tok.offset].trim();
+                // Skip rewriting commands whose RTK filters transform output format,
+                // making them incompatible with pipe consumers:
+                // - find/fd: grouped format vs one-path-per-line (#439)
+                // - curl/wget: JSON schema compression breaks downstream parsers
                 let is_pipe_incompatible = seg.starts_with("find ")
                     || seg == "find"
                     || seg.starts_with("fd ")
-                    || seg == "fd";
+                    || seg == "fd"
+                    || seg.starts_with("curl ")
+                    || seg == "curl"
+                    || seg.starts_with("wget ")
+                    || seg == "wget";
                 let rewritten = if is_pipe_incompatible {
                     seg.to_string()
                 } else {
@@ -3882,6 +3897,82 @@ mod tests {
         assert_eq!(
             rewrite_command_no_prefixes("git log | head | tail && git status", &[]),
             Some("rtk git log | head | tail && rtk git status".into())
+        );
+    }
+
+    // --- Shell function definitions must not be rewritten ---
+
+    #[test]
+    fn test_rewrite_skip_shell_function_definition() {
+        // Single-line function with curl inside
+        assert_eq!(
+            rewrite_command_no_prefixes("create_link() { curl -s https://api.example.com; }", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_multiline_function_definition() {
+        // Multiline function definition (as Claude Code would send it)
+        let cmd = "create_link() {\n  curl -s https://api.example.com\n}";
+        assert_eq!(rewrite_command_no_prefixes(cmd, &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_keyword() {
+        assert_eq!(
+            rewrite_command_no_prefixes(
+                "function fetch_data { curl -s https://example.com; }",
+                &[]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_skip_function_with_invocation() {
+        // Function definition followed by invocation
+        let cmd = r#"create_link() { curl -s "https://api.short.io/links" | python3 -c "import sys,json; print(json.load(sys.stdin))"; }; create_link "https://example.com""#;
+        assert_eq!(rewrite_command_no_prefixes(cmd, &[]), None);
+    }
+
+    // --- Pipe-incompatible commands: curl/wget must not be rewritten when piped ---
+
+    #[test]
+    fn test_rewrite_curl_pipe_skipped() {
+        // curl piped to jq/python should NOT be rewritten (output format changes)
+        assert_eq!(
+            rewrite_command_no_prefixes("curl -s https://api.example.com | jq .name", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_no_pipe_still_rewritten() {
+        // curl without pipe should still be rewritten
+        assert_eq!(
+            rewrite_command_no_prefixes("curl -s https://api.example.com", &[]),
+            Some("rtk curl -s https://api.example.com".into())
+        );
+    }
+
+    #[test]
+    fn test_rewrite_wget_pipe_skipped() {
+        assert_eq!(
+            rewrite_command_no_prefixes("wget -qO- https://example.com | grep title", &[]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_rewrite_curl_compound_and_pipe() {
+        // curl in && chain: rewrite. curl before pipe: don't rewrite.
+        assert_eq!(
+            rewrite_command_no_prefixes(
+                "git status && curl -s https://api.example.com | jq .",
+                &[]
+            ),
+            Some("rtk git status && curl -s https://api.example.com | jq .".into())
         );
     }
 }
