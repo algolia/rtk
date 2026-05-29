@@ -5,6 +5,11 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0-algolia.2] (2026-05-29)
+
+### Fixes
+* **grep:** fix single-file output parsing when matched content contains colons (`def f():`, dict literals, type hints). rg/grep omit the filename prefix for single-file searches, and the colon-counting parser mis-filed line numbers as filenames, producing garbled output. Now forces the filename prefix (`-H`) and parses by anchoring on the numeric line-number field.
+
 ## [0.42.0-algolia.1] (2026-05-29)
 
 Algolia fork catchup to upstream `v0.42.0`.
