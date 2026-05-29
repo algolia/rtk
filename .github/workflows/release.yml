@@ -124,36 +124,12 @@ jobs:
           name: rtk-deb
           path: target/debian/*.deb
 
-  build-rpm:
-    name: Build RPM package
-    runs-on: ubuntu-latest
-    container: fedora:latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          dnf install -y rust cargo rpm-build
-
-      - name: Install cargo-generate-rpm
-        run: cargo install cargo-generate-rpm
-
-      - name: Build release
-        run: cargo build --release
-
-      - name: Generate RPM
-        run: cargo generate-rpm
-
-      - name: Upload RPM
-        uses: actions/upload-artifact@v4
-        with:
-          name: rtk-rpm
-          path: target/generate-rpm/*.rpm
+  # RPM dropped: cargo-generate-rpm rejects our `-algolia.N` version suffix
+  # (RPM versions disallow '-'). install.sh uses tarballs; DEB covers Debian/Ubuntu.
 
   release:
     name: Create Release
-    needs: [build, build-deb, build-rpm]
+    needs: [build, build-deb]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
