@@ -33,7 +33,11 @@ pub fn run(
     // Without this, rg returns 0 matches for files in .gitignore, causing
     // false negatives that make AI agents draw wrong conclusions.
     // Using --no-ignore-vcs (not --no-ignore) so .ignore/.rgignore are still respected.
-    rg_cmd.args(["-n", "--no-heading", "--no-ignore-vcs", &rg_pattern, path]);
+    // -H/--with-filename: force the filename prefix even for a single-file search.
+    // Without it, rg emits `line:content` and the parser can't tell that apart from
+    // `file:line:content` once the content itself contains a colon (e.g. `def f():`),
+    // mis-filing the line number as the filename. -H makes the format deterministic.
+    rg_cmd.args(["-n", "-H", "--no-heading", "--no-ignore-vcs", &rg_pattern, path]);
 
     if let Some(ft) = file_type {
         rg_cmd.arg("--type").arg(ft);
@@ -51,7 +55,8 @@ pub fn run(
         .or_else(|_| {
             let mut grep_cmd = resolved_command("grep");
             //When we fall back to grep,include all args, not just -rn.
-            grep_cmd.args(["-rn", pattern, path]).args(extra_args);
+            // -H forces the filename prefix (single-file searches) to match the rg format.
+            grep_cmd.args(["-rn", "-H", pattern, path]).args(extra_args);
             exec_capture(&mut grep_cmd)
         })
         .context("grep/rg failed")?;
@@ -108,18 +113,9 @@ pub fn run(
 
     let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::new();
     for line in result.stdout.lines() {
-        let parts: Vec<&str> = line.splitn(3, ':').collect();
-
-        let (file, line_num, content) = if parts.len() == 3 {
-            let ln = parts[1].parse().unwrap_or(0);
-            (parts[0].to_string(), ln, parts[2])
-        } else if parts.len() == 2 {
-            let ln = parts[0].parse().unwrap_or(0);
-            (path.to_string(), ln, parts[1])
-        } else {
+        let Some((file, line_num, content)) = parse_grep_line(line, path) else {
             continue;
         };
-
         let cleaned = clean_line(content, max_line_len, context_re.as_ref(), pattern);
         by_file.entry(file).or_default().push((line_num, cleaned));
     }
@@ -181,6 +177,38 @@ fn has_format_flag(extra_args: &[String]) -> bool {
                 | "--null"
         )
     })
+}
+
+/// Parse one grep/rg result line into `(file, line_number, content)`.
+///
+/// grep/rg emits either `file:line:content` (with -H, recursive, or multi-file) or
+/// `line:content` (single file without a filename prefix). The matched content routinely
+/// contains colons (`def f():`, dict literals, type hints, URLs), so the layout cannot be
+/// decided by counting colons. We anchor instead on the invariant that the line number is
+/// always a run of digits: whichever leading field parses as a number identifies the layout.
+/// This never mis-files a line number as a filename, however many colons the content holds.
+///
+/// `default_path` is used as the file name when the line carries no filename prefix.
+/// Returns `None` for lines that don't begin with a numeric field (no usable match).
+fn parse_grep_line<'a>(line: &'a str, default_path: &str) -> Option<(String, usize, &'a str)> {
+    let parts: Vec<&str> = line.splitn(3, ':').collect();
+    match parts.as_slice() {
+        // file:line:content — middle field is the numeric line number.
+        [f, ln, rest] if ln.parse::<usize>().is_ok() => {
+            Some((f.to_string(), ln.parse().unwrap_or(0), rest))
+        }
+        // line:content — single file, no filename prefix, content had no colon.
+        [ln, rest] if ln.parse::<usize>().is_ok() => {
+            Some((default_path.to_string(), ln.parse().unwrap_or(0), rest))
+        }
+        // line:content where the content contains colons: splitn(3) over-split it. The
+        // first field is still the numeric line number; re-join the rest as content.
+        [ln, ..] if ln.parse::<usize>().is_ok() => {
+            let rest = line.split_once(':').map_or("", |(_, r)| r);
+            Some((default_path.to_string(), ln.parse().unwrap_or(0), rest))
+        }
+        _ => None,
+    }
 }
 
 fn clean_line(line: &str, max_len: usize, context_re: Option<&Regex>, pattern: &str) -> String {
@@ -257,6 +285,54 @@ mod tests {
         let cleaned = clean_line(line, 50, None, "result");
         assert!(!cleaned.starts_with(' '));
         assert!(cleaned.len() <= 50);
+    }
+
+    // --- grep line parsing (regression for single-file colon-content mis-parse) ---
+
+    #[test]
+    fn test_parse_grep_line_with_filename() {
+        // rg -H / recursive: file:line:content
+        let parsed = parse_grep_line("src/foo.py:42:    return x", "fallback.py");
+        assert_eq!(parsed, Some(("src/foo.py".to_string(), 42, "    return x")));
+    }
+
+    #[test]
+    fn test_parse_grep_line_single_file_no_colon() {
+        // single file, content has no colon: line:content
+        let parsed = parse_grep_line("3:        ta = TypeAdapter(int)", "test.py");
+        assert_eq!(parsed, Some(("test.py".to_string(), 3, "        ta = TypeAdapter(int)")));
+    }
+
+    #[test]
+    fn test_parse_grep_line_single_file_colon_in_content() {
+        // THE BUG: single file, content contains a colon (`def test():`).
+        // Old code split into ["2", "    def test_messages(self)", ""] and filed
+        // line number "2" as the FILENAME with empty content. Must not happen.
+        let parsed = parse_grep_line("2:    def test_messages(self):", "test.py");
+        assert_eq!(
+            parsed,
+            Some(("test.py".to_string(), 2, "    def test_messages(self):"))
+        );
+    }
+
+    #[test]
+    fn test_parse_grep_line_filename_and_colon_content() {
+        // file:line:content where content also has colons (dict literal).
+        let parsed = parse_grep_line(r#"a.py:4:    return ta.model_validate({"k": "v"})"#, "x");
+        assert_eq!(
+            parsed,
+            Some((
+                "a.py".to_string(),
+                4,
+                r#"    return ta.model_validate({"k": "v"})"#
+            ))
+        );
+    }
+
+    #[test]
+    fn test_parse_grep_line_non_numeric_dropped() {
+        // A line that begins with no numeric field is not a usable match.
+        assert_eq!(parse_grep_line("not a grep line", "x"), None);
     }
 
     #[test]
