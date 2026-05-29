@@ -98,7 +98,12 @@ jobs:
   # ═══════════════════════════════════════════════
 
   release-please:
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    # Disabled on this fork: releases are cut manually via
+    # `gh workflow run release.yml -f tag=vX.Y.Z-algolia.N`. release-please needs a
+    # GitHub App (APP_CLIENT_ID/APP_PRIVATE_KEY) the fork doesn't have, and can't emit
+    # our `-algolia.N` version suffix. Disabling it cascades: build-release and
+    # update-latest-tag skip (they gate on release_created). Re-enable if a GitHub App is set up.
+    if: false
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
