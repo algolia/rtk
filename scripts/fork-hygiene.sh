@@ -27,7 +27,11 @@ FIX=0
 
 # Files where the patterns are *documented* (rules) or are legitimate data/history.
 # Excluded from the leak scan so the gate isn't self-tripped.
-GATE_EXCLUDES=(--glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md')
+# --hidden so .github/, .rtk/ etc. are scanned (ripgrep skips dotdirs by default);
+# !.git keeps the object store out.
+GATE_EXCLUDES=(--hidden --glob '!.git' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md')
+# Shared excludes for --fix replacements (never rewrite the rules doc, the script, or legal text)
+FIX_EXCLUDES=(--hidden --glob '!.git' --glob '!Cargo.lock' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE')
 
 if [[ $FIX -eq 1 ]]; then
   echo "==> Applying deterministic fork-hygiene fixes"
@@ -35,12 +39,12 @@ if [[ $FIX -eq 1 ]]; then
   # 1. Repo slug (everywhere except the lockfile).
   #    NOTE: code-comment provenance should reference "upstream #<n>" (no slug),
   #    not "rtk-ai/rtk#<n>" — keep history meaning without re-introducing the slug.
-  rg -l 'rtk-ai/rtk' --glob '!Cargo.lock' | while read -r f; do
+  rg -l "${FIX_EXCLUDES[@]}" 'rtk-ai/rtk' | while read -r f; do
     sed -i 's#rtk-ai/rtk#'"${REPO}"'#g' "$f"
   done
 
   # 2. Website + star-history + link text
-  rg -l 'rtk-ai\.app|rtk-ai%2Frtk' --glob '!Cargo.lock' --glob '!LICENSE' --glob '!CONTRIBUTING.md' | while read -r f; do
+  rg -l "${FIX_EXCLUDES[@]}" 'rtk-ai\.app|rtk-ai%2Frtk' | while read -r f; do
     sed -i \
       -e 's#https://www\.rtk-ai\.app/guide#https://github.com/'"${REPO}"'/tree/main/docs/guide#g' \
       -e 's#https://www\.rtk-ai\.app#https://github.com/'"${REPO}"'#g' \
@@ -51,7 +55,7 @@ if [[ $FIX -eq 1 ]]; then
   done
 
   # 3. Emails -> Slack ('|' delimiter: replacement contains '#')
-  rg -l 'contact@rtk-ai\.app|security@rtk-ai\.app' --glob '!Cargo.lock' | while read -r f; do
+  rg -l "${FIX_EXCLUDES[@]}" 'contact@rtk-ai\.app|security@rtk-ai\.app' | while read -r f; do
     sed -i -e "s|contact@rtk-ai\.app|${SLACK}|g" -e "s|security@rtk-ai\.app|${SLACK}|g" "$f"
   done
 

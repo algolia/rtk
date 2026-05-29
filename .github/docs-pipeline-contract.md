@@ -1,7 +1,7 @@
 # RTK Documentation — Interface Contract
 
 This directory contains user-facing documentation for the RTK website.
-It feeds `rtk-ai/rtk-website` via the `prepare-docs.mjs` pipeline.
+It feeds `algolia/rtk-website` via the `prepare-docs.mjs` pipeline.
 
 **Scope**: `docs/guide/` is website content only. Technical and contributor documentation
 lives in the codebase (distributed, co-located pattern):

@@ -22,7 +22,7 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_BODY: ${{ github.event.pull_request.body }}
           REPO: ${{ github.repository }}
-          ALLOWED_REPOS: "rtk-ai/rtk"
+          ALLOWED_REPOS: "algolia/rtk"
         run: |
           set -euo pipefail
 
