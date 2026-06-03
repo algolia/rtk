@@ -132,3 +132,41 @@ Verified fixed: `rg -li PAT -g '*.py'`, `rg -l PAT --type py`, `rg -l -t py PAT`
 BRE `foo\|bar`, `--glob`, `-A`/context, `-c` count — all succeed via `rtk grep`.
 See `src/cmds/system/grep_cmd.rs` (`locate_pattern`, `grep_safe_args`,
 `token_has_format_flag`) and the de-typed `Grep` variant in `src/main.rs`.
+
+---
+
+## REOPENED — additional case after the fix (2026-06-03 PM, rtk 0.42.0-algolia.2)
+
+The de-typing fix above did not cover **`grep -E`** (GNU extended-regex flag).
+
+**Observed:** `grep -nE '^    (async )?def ' file.py` failed with:
+
+```
+rg: error parsing flag -E: grep config error: unknown encoding: ^    (async )?def
+```
+
+i.e. `-E` was bound to ripgrep's `-E/--encoding`, and the **regex pattern was
+consumed as the encoding value**. So `grep -E` (a no-op-ish "use ERE" request,
+which is rg's default dialect anyway) is mis-rewritten and the command dies.
+
+**Expected:** `-E` from a `grep` invocation should be recognized as
+extended-regex (drop it for rg, since rg is ERE by default) — never mapped to
+`--encoding`. Same root family as the resolved typed-short-flag collision; `-E`
+just wasn't in the verified set.
+
+**Workaround:** invoke `rg` directly without `-E` (rg is ERE natively), or
+`rtk proxy grep -E …`.
+
+### RESOLVED — 2026-06-04
+
+`-E` belongs to the same hazard class as `-r`: a grep flag whose letter ripgrep
+reuses for a **value-taking** flag (`-r`→`--replace`, `-E`→`--encoding`), so
+forwarding it makes rg swallow the pattern. The recursive-stripping helper was
+generalized (`strip_grep_recursive` → `strip_grep_only_flags`) to drop `-r`/`-R`
+**and** `-E` (plus `--extended-regexp`), including from combined bundles
+(`-nE`→`-n`, `-rE`→dropped) while preserving value-taking flags and their values.
+rg is ERE by default, so dropping `-E` is safe.
+
+Verified: `grep -nE 'def' x.py` returns matches (was "unknown encoding"). Guarded
+by `test_strip_grep_only_extended_regex_E` (unit) and
+`grep_extended_regex_ere_flag_is_handled` (behavioral, `tests/grep_flag_regression.rs`).
