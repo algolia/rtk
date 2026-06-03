@@ -218,10 +218,18 @@ upstream tag (see `git log` for prior `fork: upstream catchup ...` commits).
 6. **Identity**: `scripts/fork-hygiene.sh --fix`, then scrub any telemetry residue
    from docs by hand. Restore fork-specific `CLAUDE.md` from the old `main` if the
    branch switch replaced it; fix its doc-links to the current layout.
-7. **Re-apply CI guards**: release-asset verification + `main`-branch triggers (see `release.yml`/`cd.yml`).
-8. **Version**: `Cargo.toml` → `X.Y.Z-algolia.N`; keep `.release-please-manifest.json`
+7. **Rationalize `.claude/` skills**: skills are checked into the repo, so upstream
+   ones land on every catchup carrying upstream assumptions. Audit `.claude/skills/*`
+   (and `.claude/commands/*`) against fork reality — the worst offender is **`/ship`**
+   (`.claude/skills/ship/SKILL.md`): it assumes plain semver (we use `X.Y.Z-algolia.N`),
+   release-please-generated CHANGELOG (disabled on fork — we hand-edit), `git push origin main`,
+   crates.io/Homebrew publish, and — critically — `Co-Authored-By: Claude` commit
+   trailers (**hard-banned**, no AI fingerprints). Fix or fork-annotate any skill whose
+   steps don't match `### On Release` / `## Fork Hygiene` here before trusting it.
+8. **Re-apply CI guards**: release-asset verification + `main`-branch triggers (see `release.yml`/`cd.yml`).
+9. **Version**: `Cargo.toml` → `X.Y.Z-algolia.N`; keep `.release-please-manifest.json`
    at the upstream base `X.Y.Z`; add a `CHANGELOG.md` fork entry.
-9. **Gate**: `cargo fmt --all && cargo clippy --all-targets && cargo test --all`
+10. **Gate**: `cargo fmt --all && cargo clippy --all-targets && cargo test --all`
    and `scripts/fork-hygiene.sh`. All green → squash-commit → tag `vX.Y.Z-algolia.N`.
 
 ## Plan Execution Protocol
