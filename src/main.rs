@@ -300,31 +300,17 @@ enum Commands {
         command: Vec<String>,
     },
 
-    /// Compact grep - strips whitespace, truncates, groups by file
+    /// Compact grep - forwards all flags to ripgrep, then groups matches by file.
+    ///
+    /// Accepts grep/rg-style invocation with flags before the pattern
+    /// (e.g. `rtk grep -li "foo" --type py src/`). All arguments are forwarded to
+    /// ripgrep verbatim; rtk only regroups and truncates the output. No typed flags
+    /// are declared here on purpose — the previous `-l`/`-t` options collided with
+    /// grep/rg's own `-l`/`-t` and broke flags-before-pattern invocations.
     Grep {
-        /// Pattern to search
-        pattern: String,
-        /// Path to search in
-        #[arg(default_value = ".")]
-        path: String,
-        /// Max line length
-        #[arg(short = 'l', long, default_value = "80")]
-        max_len: usize,
-        /// Max results to show
-        #[arg(short, long, default_value = "200")]
-        max: usize,
-        /// Show only match context (not full line)
-        #[arg(long)]
-        context_only: bool,
-        /// Filter by file type (e.g., ts, py, rust)
-        #[arg(short = 't', long)]
-        file_type: Option<String>,
-        /// Show line numbers (always on, accepted for grep/rg compatibility)
-        #[arg(short = 'n', long)]
-        line_numbers: bool,
-        /// Extra ripgrep arguments (e.g., -i, -A 3, -w, --glob)
+        /// ripgrep/grep arguments: flags, pattern, and paths, forwarded verbatim.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        extra_args: Vec<String>,
+        args: Vec<String>,
     },
 
     /// Initialize rtk instructions for assistant CLI usage
@@ -1771,25 +1757,7 @@ fn run_cli() -> Result<i32> {
             summary::run(&cmd, cli.verbose)?
         }
 
-        Commands::Grep {
-            pattern,
-            path,
-            max_len,
-            max,
-            context_only,
-            file_type,
-            line_numbers: _, // no-op: line numbers always enabled in grep_cmd::run
-            extra_args,
-        } => grep_cmd::run(
-            &pattern,
-            &path,
-            max_len,
-            max,
-            context_only,
-            file_type.as_deref(),
-            &extra_args,
-            cli.verbose,
-        )?,
+        Commands::Grep { args } => grep_cmd::run(&args, cli.verbose)?,
 
         Commands::Init {
             global,

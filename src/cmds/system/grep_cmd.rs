@@ -8,72 +8,110 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
 
-#[allow(clippy::too_many_arguments)]
-pub fn run(
-    pattern: &str,
-    path: &str,
-    max_line_len: usize,
-    max_results: usize,
-    context_only: bool,
-    file_type: Option<&str>,
-    extra_args: &[String],
-    verbose: u8,
-) -> Result<i32> {
+/// Default cap on rendered match-line length (chars). Lines longer than this are
+/// context-truncated around the pattern. Previously a `-l` clap flag — dropped
+/// because `-l` collides with grep/rg's `--files-with-matches`.
+const GREP_MAX_LINE_LEN: usize = 80;
+
+/// grep/rg flags that consume the FOLLOWING token as their value. Used only to
+/// locate the positional pattern for cosmetic truncation — rg parses the real
+/// args itself, so this list does not need to be exhaustive to stay correct.
+const VALUE_FLAGS: &[&str] = &[
+    "-A",
+    "--after-context",
+    "-B",
+    "--before-context",
+    "-C",
+    "--context",
+    "-m",
+    "--max-count",
+    "-e",
+    "--regexp",
+    "-f",
+    "--file",
+    "-g",
+    "--glob",
+    "--iglob",
+    "-t",
+    "--type",
+    "-T",
+    "--type-not",
+    "--type-add",
+    "--max-columns",
+    "--color",
+    "--colors",
+    "--encoding",
+    "--sort",
+    "--sortr",
+    "--pre",
+    "--threads",
+    "-j",
+    "--replace",
+    "--context-separator",
+];
+
+/// Run `rtk grep`. `args` is the raw, verbatim grep/rg argument vector (flags,
+/// pattern, and paths in any order) captured by clap's trailing-var-arg. Forwarding
+/// the args untouched to ripgrep is what lets idiomatic invocations like
+/// `rg -li "foo" --type py` work — the old typed clap interface stole short flags
+/// (notably `-l`) from the grep/rg namespace and broke on flags-before-pattern.
+pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
+    if args.is_empty() {
+        eprintln!("rtk grep: no pattern given");
+        return Ok(2);
+    }
+
+    let (pattern_idx, pattern, path) = locate_pattern(args);
+    let pattern_display = pattern.clone().unwrap_or_else(|| "?".to_string());
+
     if verbose > 0 {
-        eprintln!("grep: '{}' in {}", pattern, path);
+        eprintln!("grep: '{}' in {}", pattern_display, path);
     }
 
-    // Fix: convert BRE alternation \| → | for rg (which uses PCRE-style regex)
-    let rg_pattern = pattern.replace(r"\|", "|");
-
-    let mut rg_cmd = resolved_command("rg");
-    // --no-ignore-vcs: match grep -r behavior (don't skip .gitignore'd files).
-    // Without this, rg returns 0 matches for files in .gitignore, causing
-    // false negatives that make AI agents draw wrong conclusions.
-    // Using --no-ignore-vcs (not --no-ignore) so .ignore/.rgignore are still respected.
-    // -H/--with-filename: force the filename prefix even for a single-file search.
-    // Without it, rg emits `line:content` and the parser can't tell that apart from
-    // `file:line:content` once the content itself contains a colon (e.g. `def f():`),
-    // mis-filing the line number as the filename. -H makes the format deterministic.
-    rg_cmd.args(["-n", "-H", "--no-heading", "--no-ignore-vcs", &rg_pattern, path]);
-
-    if let Some(ft) = file_type {
-        rg_cmd.arg("--type").arg(ft);
-    }
-
-    for arg in extra_args {
-        // Fix: skip grep-ism -r flag (rg is recursive by default; rg -r means --replace)
-        if arg == "-r" || arg == "--recursive" {
+    // Forward the user's args verbatim to rg, fixing two grep-isms:
+    //  - strip -r/--recursive (rg is recursive by default; rg -r means --replace)
+    //  - translate BRE alternation \| → | on the pattern token (grep BRE vs rg regex)
+    let mut user_args: Vec<String> = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        if a == "-r" || a == "--recursive" {
             continue;
         }
-        rg_cmd.arg(arg);
+        if Some(i) == pattern_idx {
+            user_args.push(a.replace(r"\|", "|"));
+        } else {
+            user_args.push(a.clone());
+        }
     }
+
+    let mut rg_cmd = resolved_command("rg");
+    // -n line numbers; -H force filename prefix so the layout is always
+    // `file:line:content` (the parser can't otherwise tell `line:content` apart once
+    // the content holds a colon); --no-heading for flat output; --no-ignore-vcs to
+    // match grep -r and not skip .gitignore'd files (avoids silent false negatives).
+    rg_cmd.args(["-n", "-H", "--no-heading", "--no-ignore-vcs"]);
+    rg_cmd.args(&user_args);
 
     let result = exec_capture(&mut rg_cmd)
         .or_else(|_| {
+            // rg binary unavailable — fall back to grep, stripping rg-only flags so
+            // grep doesn't abort on an option it never understood.
             let mut grep_cmd = resolved_command("grep");
-            //When we fall back to grep,include all args, not just -rn.
-            // -H forces the filename prefix (single-file searches) to match the rg format.
-            grep_cmd.args(["-rn", "-H", pattern, path]).args(extra_args);
+            grep_cmd.args(["-rn", "-H"]);
+            grep_cmd.args(grep_safe_args(&user_args));
             exec_capture(&mut grep_cmd)
         })
         .context("grep/rg failed")?;
 
-    // Passthrough output flags that produce output that is already small.
-    if has_format_flag(extra_args) {
+    // Passthrough output flags whose format we can't regroup (file lists, counts).
+    if has_format_flag(args) {
         print!("{}", result.stdout);
         if !result.stderr.is_empty() {
             eprint!("{}", result.stderr.trim());
         }
 
-        let args_display = if extra_args.is_empty() {
-            format!("'{}' {}", pattern, path)
-        } else {
-            format!("{} '{}' {}", extra_args.join(" "), pattern, path)
-        };
-
+        let args_display = args.join(" ");
         timer.track_passthrough(
             &format!("grep {}", args_display),
             &format!("rtk grep {} (passthrough)", args_display),
@@ -89,10 +127,10 @@ pub fn run(
         if exit_code == 2 && !result.stderr.trim().is_empty() {
             eprintln!("{}", result.stderr.trim());
         }
-        let msg = format!("0 matches for '{}'", pattern);
+        let msg = format!("0 matches for '{}'", pattern_display);
         println!("{}", msg);
         timer.track(
-            &format!("grep -rn '{}' {}", pattern, path),
+            &format!("grep {}", args.join(" ")),
             "rtk grep",
             &raw_output,
             &msg,
@@ -104,19 +142,14 @@ pub fn run(
     // Output in standard file:line:content format that AI agents can parse.
     // (A passthrough approach yields 0% savings — no reason for RTK to exist on that path.)
     let total_matches = result.stdout.lines().count();
-
-    let context_re = if context_only {
-        Regex::new(&format!("(?i).{{0,20}}{}.*", regex::escape(pattern))).ok()
-    } else {
-        None
-    };
+    let pattern_for_clean = pattern.as_deref().unwrap_or("");
 
     let mut by_file: HashMap<String, Vec<(usize, String)>> = HashMap::new();
     for line in result.stdout.lines() {
-        let Some((file, line_num, content)) = parse_grep_line(line, path) else {
+        let Some((file, line_num, content)) = parse_grep_line(line, &path) else {
             continue;
         };
-        let cleaned = clean_line(content, max_line_len, context_re.as_ref(), pattern);
+        let cleaned = clean_line(content, GREP_MAX_LINE_LEN, None, pattern_for_clean);
         by_file.entry(file).or_default().push((line_num, cleaned));
     }
 
@@ -131,6 +164,7 @@ pub fn run(
     let mut files: Vec<_> = by_file.iter().collect();
     files.sort_by_key(|(f, _)| *f);
 
+    let max_results = config::limits().grep_max_results;
     let per_file = config::limits().grep_max_per_file;
     for (file, matches) in files {
         if shown >= max_results {
@@ -153,7 +187,7 @@ pub fn run(
 
     print!("{}", rtk_output);
     timer.track(
-        &format!("grep -rn '{}' {}", pattern, path),
+        &format!("grep {}", args.join(" ")),
         "rtk grep",
         &raw_output,
         &rtk_output,
@@ -162,21 +196,121 @@ pub fn run(
     Ok(exit_code)
 }
 
-fn has_format_flag(extra_args: &[String]) -> bool {
-    extra_args.iter().any(|arg| {
-        matches!(
-            arg.as_str(),
-            "-c" | "--count"
-                | "-l"
-                | "--files-with-matches"
-                | "-L"
-                | "--files-without-match"
-                | "-o"
-                | "--only-matching"
-                | "-Z"
-                | "--null"
-        )
-    })
+/// Locate the positional pattern (and search path) within a raw grep/rg arg list.
+/// Returns `(pattern_index, pattern, path)`. The pattern is the first token that is
+/// neither a flag nor consumed as a flag's value; the path is the next such token.
+/// Used only for cosmetics (truncation context, the no-match message) — ripgrep
+/// receives the args verbatim regardless, so an imperfect guess never corrupts a search.
+fn locate_pattern(args: &[String]) -> (Option<usize>, Option<String>, String) {
+    let mut pattern_idx = None;
+    let mut pattern = None;
+    let mut path = None;
+    let mut positional_only = false;
+    let mut i = 0;
+    while i < args.len() {
+        let a = &args[i];
+        if !positional_only && a == "--" {
+            positional_only = true;
+            i += 1;
+            continue;
+        }
+        if !positional_only && a.starts_with('-') && a.len() > 1 {
+            // Flag — skip its value too when it takes one as a separate token.
+            if !a.contains('=') && VALUE_FLAGS.contains(&a.as_str()) {
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+        if pattern.is_none() {
+            pattern_idx = Some(i);
+            pattern = Some(a.clone());
+        } else if path.is_none() {
+            path = Some(a.clone());
+        }
+        i += 1;
+    }
+    (
+        pattern_idx,
+        pattern,
+        path.unwrap_or_else(|| ".".to_string()),
+    )
+}
+
+/// Strip rg-only flags (and their separate-token values) so the grep fallback,
+/// taken only when ripgrep is absent, does not abort on an unrecognized option.
+fn grep_safe_args(args: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    let mut skip_next = false;
+    for a in args {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        let bare = a.split('=').next().unwrap_or(a);
+        let rg_only = matches!(
+            bare,
+            "--type"
+                | "-t"
+                | "--type-not"
+                | "-T"
+                | "--type-add"
+                | "--glob"
+                | "-g"
+                | "--iglob"
+                | "--no-ignore-vcs"
+                | "--no-heading"
+                | "--json"
+                | "--pre"
+        );
+        if rg_only {
+            if !a.contains('=') && VALUE_FLAGS.contains(&bare) {
+                skip_next = true;
+            }
+            continue;
+        }
+        out.push(a.clone());
+    }
+    out
+}
+
+/// Short flags that change rg/grep's output away from `file:line:content`
+/// (file lists, counts, only-matching, null-separated) → must passthrough unregrouped.
+const FORMAT_SHORT: &[char] = &['l', 'L', 'c', 'o', 'Z'];
+/// Short flags that consume a value, so the rest of a combined bundle is that value,
+/// not more flags (e.g. `-A3`, `-tpy`). Stops format-letter scanning at the value.
+const SHORT_VALUE_CHARS: &[char] = &['A', 'B', 'C', 'm', 'e', 'f', 'g', 't', 'T', 'j', 'M'];
+
+/// Does this single token request a format that we can't regroup as `file:line:content`?
+/// Handles long flags and combined short bundles (`-li` contains `-l`), while not
+/// mistaking a value-flag's value for flag letters (`-tpy` is `--type py`, not `-p`).
+fn token_has_format_flag(tok: &str) -> bool {
+    if let Some(long) = tok.strip_prefix("--") {
+        return matches!(
+            long,
+            "count"
+                | "files-with-matches"
+                | "files-without-match"
+                | "only-matching"
+                | "null"
+        );
+    }
+    if let Some(rest) = tok.strip_prefix('-') {
+        for c in rest.chars() {
+            if FORMAT_SHORT.contains(&c) {
+                return true;
+            }
+            if SHORT_VALUE_CHARS.contains(&c) {
+                break; // remainder is this flag's value, not more flags
+            }
+        }
+    }
+    false
+}
+
+fn has_format_flag(args: &[String]) -> bool {
+    args.iter().any(|a| token_has_format_flag(a))
 }
 
 /// Parse one grep/rg result line into `(file, line_number, content)`.
@@ -342,12 +476,56 @@ mod tests {
         assert!(compact.len() <= 60);
     }
 
+    // --- raw-arg parsing: pattern/path location and grep-fallback sanitization ---
+
+    fn sv(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
     #[test]
-    fn test_extra_args_accepted() {
-        // Test that the function signature accepts extra_args
-        // This is a compile-time test - if it compiles, the signature is correct
-        let _extra: Vec<String> = vec!["-i".to_string(), "-A".to_string(), "3".to_string()];
-        // No need to actually run - we're verifying the parameter exists
+    fn test_locate_pattern_flags_before_pattern() {
+        // THE BUG: `rg -li "foo" --type py` rewritten to `rtk grep -li foo --type py`.
+        // -l no longer steals "foo"; the pattern is correctly the first positional.
+        let (idx, pat, path) = locate_pattern(&sv(&["-li", "foo", "--type", "py"]));
+        assert_eq!(pat.as_deref(), Some("foo"));
+        assert_eq!(idx, Some(1));
+        assert_eq!(path, "."); // "py" is the value of --type, not a path
+    }
+
+    #[test]
+    fn test_locate_pattern_value_flag_not_mistaken_for_pattern() {
+        // -g takes a glob value; the glob must not be read as the pattern.
+        let (_, pat, path) = locate_pattern(&sv(&["-g", "*.py", "needle", "src/"]));
+        assert_eq!(pat.as_deref(), Some("needle"));
+        assert_eq!(path, "src/");
+    }
+
+    #[test]
+    fn test_locate_pattern_simple_pattern_and_path() {
+        let (idx, pat, path) = locate_pattern(&sv(&["needle", "src/"]));
+        assert_eq!(idx, Some(0));
+        assert_eq!(pat.as_deref(), Some("needle"));
+        assert_eq!(path, "src/");
+    }
+
+    #[test]
+    fn test_locate_pattern_double_dash_forces_positional() {
+        // After `--`, a leading-dash token is the pattern, not a flag.
+        let (_, pat, _) = locate_pattern(&sv(&["--", "-weird-pattern"]));
+        assert_eq!(pat.as_deref(), Some("-weird-pattern"));
+    }
+
+    #[test]
+    fn test_grep_safe_args_strips_rg_only_flags() {
+        // The grep fallback (rg absent) must not receive --type/--glob/-g.
+        let safe = grep_safe_args(&sv(&["-i", "--type", "py", "needle", "-g", "*.rs"]));
+        assert_eq!(safe, sv(&["-i", "needle"]));
+    }
+
+    #[test]
+    fn test_grep_safe_args_keeps_grep_compatible_flags() {
+        let safe = grep_safe_args(&sv(&["-i", "-w", "needle"]));
+        assert_eq!(safe, sv(&["-i", "-w", "needle"]));
     }
 
     #[test]
@@ -447,6 +625,22 @@ mod tests {
             "-A".to_string(),
             "3".to_string(),
         ]));
+    }
+
+    #[test]
+    fn test_format_flag_detects_combined_short_bundle() {
+        // `-li` (= -l -i) must be recognized as a files-with-matches request,
+        // else rtk tries to regroup filename-only output ("N matches in 0 files").
+        assert!(has_format_flag(&["-li".to_string()]));
+        assert!(has_format_flag(&["-rl".to_string()]));
+    }
+
+    #[test]
+    fn test_format_flag_value_in_bundle_not_misread() {
+        // `-tlog` is `--type log` (value "log"), NOT a hidden -l/-o; must be false.
+        assert!(!token_has_format_flag("-tlog"));
+        // `-A3` is after-context 3, not a format flag.
+        assert!(!token_has_format_flag("-A3"));
     }
 
     // Verify line numbers are always enabled in rg invocation (grep_cmd.rs:24).
