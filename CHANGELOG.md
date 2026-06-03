@@ -5,6 +5,19 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0-algolia.3] (2026-06-04)
+
+### Fixes
+
+* **grep:** forward `rg`/`grep` arguments to ripgrep verbatim, fixing the flag collision where `rtk grep`'s own typed `-l`/`-t` options shadowed grep/rg's `-l` (`--files-with-matches`) and `-t`/`--type`. Idiomatic `rg -l PATTERN --type py` (flags before the pattern) no longer fails clap parsing and falls through to a raw `grep` that rejected `--type`/`-g`/`--glob`.
+* **grep:** strip grep's `-r`/`-R` (recursive) and `-E` (extended-regex) before invoking ripgrep, where those letters are the *value-taking* `--replace`/`--encoding`. Previously a muscle-memory `grep -rn def` parsed in rg as `--replace=n` and silently rewrote every match (`def foo` → `n foo`) — the long-reported "identifier mangling". Handles combined bundles (`-rn` → `-n`, `-nE` → `-n`).
+* **grep:** emit the complete, unregrouped result when stdout is a real file (`grep PATTERN file > out.txt`) instead of truncating to the per-file cap with `[+N more]`, which silently dropped matches from a file the caller treats as authoritative. Pipes (agent capture) and TTYs keep the compact, token-saving view.
+* **cli:** when a fallback command cannot be resolved to a runnable binary, report `command not found` / `not executable` instead of a misleading `[rtk: Permission denied (os error 13)]` exit 127 (execvp's PATH-scan EACCES), which read as a file-permission failure on the user's files.
+
+### Tests
+
+* Add `tests/grep_flag_regression.rs`: behavioral regression suite driving the built binary end-to-end (flag collisions, `-rn`/`-E` mangling, redirect-vs-pipe truncation). Verified red on `0.42.0-algolia.2`, green here.
+
 ## [0.42.0-algolia.2] (2026-05-29)
 
 ### Fixes
