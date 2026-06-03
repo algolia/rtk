@@ -108,6 +108,47 @@ fn grep_extended_regex_ere_flag_is_handled() {
 }
 
 #[test]
+fn grep_redirect_to_file_keeps_all_matches() {
+    // Silent data loss: truncating to ~25 rows into a redirected file drops matches the
+    // caller treats as complete. A real `> out.txt` redirect must get every match.
+    if !rg_available() {
+        eprintln!("rg not installed — skipping");
+        return;
+    }
+    let dir = std::env::temp_dir().join("rtk_grep_regression_redirect");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    // 40 matching lines — well over the per-file cap (25).
+    let body: String = (0..40).map(|i| format!("needle line {i}\n")).collect();
+    std::fs::write(dir.join("many.txt"), body).expect("write fixture");
+
+    let outpath = dir.join("out.txt");
+    let exe = env!("CARGO_BIN_EXE_rtk");
+    let outfile = std::fs::File::create(&outpath).expect("create redirect target");
+    let status = Command::new(exe)
+        .arg("grep")
+        .args(["needle", "many.txt"])
+        .current_dir(&dir)
+        .env("RTK_DB_PATH", dir.join("rtk-test.db"))
+        .stdout(std::process::Stdio::from(outfile)) // real-file redirect
+        .status()
+        .expect("spawn rtk");
+    assert!(status.success() || status.code() == Some(0));
+
+    let content = std::fs::read_to_string(&outpath).expect("read redirect output");
+    let matches = content.lines().filter(|l| l.contains("needle")).count();
+    assert_eq!(
+        matches, 40,
+        "redirect to a file must contain ALL matches, got {matches}:\n{content}"
+    );
+    assert!(
+        !content.contains("[+"),
+        "redirect must not contain a truncation marker:\n{content}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn grep_rg_type_and_l_flags_do_not_collide() {
     // `-l` (files-with-matches) + `--type` must work, not error from /usr/bin/grep.
     if !rg_available() {

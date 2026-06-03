@@ -112,8 +112,14 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         })
         .context("grep/rg failed")?;
 
-    // Passthrough output flags whose format we can't regroup (file lists, counts).
-    if has_format_flag(args) {
+    // Emit the complete, unregrouped rg output (no per-file/global caps, no
+    // `[+N more]`) when either:
+    //  - an output-format flag is set (file lists, counts) we can't regroup, OR
+    //  - stdout is a real file: a redirect like `grep … > out.txt` expects the
+    //    COMPLETE result, and truncating to N rows would silently drop data into a
+    //    file the caller treats as authoritative. Pipes (agent capture) and TTYs
+    //    still get the compact, token-saving view — that is RTK's main job.
+    if has_format_flag(args) || stdout_is_regular_file() {
         print!("{}", result.stdout);
         if !result.stderr.is_empty() {
             eprint!("{}", result.stderr.trim());
@@ -244,6 +250,40 @@ fn locate_pattern(args: &[String]) -> (Option<usize>, Option<String>, String) {
         pattern,
         path.unwrap_or_else(|| ".".to_string()),
     )
+}
+
+/// Is this process's stdout connected to a regular file (a `> out.txt` redirect)?
+/// Distinguishes a redirect — where the caller wants the COMPLETE result — from a
+/// pipe (agent/harness capture, where RTK truncates to save tokens) or a TTY. We
+/// inspect the fd/handle metadata without taking ownership (ManuallyDrop keeps the
+/// real stdout open). Any inspection failure conservatively returns false (truncate).
+#[allow(unsafe_code)]
+fn stdout_is_regular_file() -> bool {
+    use std::mem::ManuallyDrop;
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::{AsRawFd, FromRawFd};
+        let fd = std::io::stdout().as_raw_fd();
+        // SAFETY: we wrap the borrowed stdout fd without taking ownership; ManuallyDrop
+        // prevents the File destructor from closing the real stdout. Read-only metadata.
+        // nosemgrep: unsafe-block
+        let f = ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd) });
+        f.metadata().map(|m| m.is_file()).unwrap_or(false)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle};
+        let h = std::io::stdout().as_raw_handle();
+        // SAFETY: we wrap the borrowed stdout handle without taking ownership; ManuallyDrop
+        // prevents the File destructor from closing the real stdout. Read-only metadata.
+        // nosemgrep: unsafe-block
+        let f = ManuallyDrop::new(unsafe { std::fs::File::from_raw_handle(h) });
+        f.metadata().map(|m| m.is_file()).unwrap_or(false)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
 }
 
 /// Remove grep flags that must NOT reach ripgrep verbatim because rg either does them
