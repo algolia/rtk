@@ -7,6 +7,20 @@ allowed-tools: Read Write Edit Bash Grep Glob
 
 Systematic release workflow for RTK: build verification, version bump, changelog update, git tag, and push to trigger CI/CD.
 
+## ✅ Canonical path: `scripts/ship.sh`
+
+Don't hand-run the steps below — they exist as a committed, fork-correct script:
+
+```bash
+scripts/ship.sh 0.42.0-algolia.4          # gate → hygiene → bump → commit → tag → push → dispatch
+scripts/ship.sh 0.42.0-algolia.4 --dry-run   # preview without writing
+```
+
+It encodes everything in the Fork conventions banner, and — critically — runs the
+manual `gh workflow run release.yml` that publishes the binaries (the CD workflow does
+NOT, and `v0.42.0-algolia.2` shipped a tag with no assets because that step was skipped).
+The prose below is the rationale/manual fallback if the script can't be used.
+
 ## ⚠️ Fork conventions (algolia/rtk) — these OVERRIDE the generic steps below
 
 This is the **algolia fork**, not upstream. The generic semver/release-please/crates.io

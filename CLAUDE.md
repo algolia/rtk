@@ -194,9 +194,22 @@ All `README*.md`, `INSTALL.md`, `CLAUDE.md`, `openclaw/README.md`, `Formula/rtk.
 
 ### On Release
 
-1. Run `scripts/fork-hygiene.sh` — fix any matches
-2. Update version strings in docs to match `Cargo.toml`
-3. Verify `gh repo view --json homepageUrl` returns empty (not upstream URL)
+Use the driver — it encodes every step and can't forget the asset publish:
+
+```bash
+scripts/ship.sh <X.Y.Z-algolia.N>      # gate → hygiene → bump → commit → tag → push → dispatch
+```
+
+It runs `gh workflow run release.yml` itself. **This dispatch is mandatory and easy to
+forget**: release-please/CD is disabled on the fork, so a tag push alone publishes NO
+binaries (that is why `v0.42.0-algolia.2` has a tag but no GitHub release/assets).
+
+Manual fallback / what the driver does:
+1. `scripts/fork-hygiene.sh` — fix any matches
+2. Bump `Cargo.toml` (+`cargo update -p rtk`); keep `.release-please-manifest.json` at base; hand-add the `CHANGELOG.md` entry
+3. Commit `chore(release): X.Y.Z-algolia.N` (no AI-fingerprint trailers), tag `vX.Y.Z-algolia.N`, push branch + tag
+4. **`gh workflow run release.yml -f tag=vX.Y.Z-algolia.N -f prerelease=false`** ← publishes the 5-platform assets
+5. Verify: `gh release view vX.Y.Z-algolia.N` shows assets; `gh repo view --json homepageUrl` empty (not upstream URL)
 
 ## Upstream Catchup Procedure
 
@@ -215,9 +228,11 @@ upstream tag (see `git log` for prior `fork: upstream catchup ...` commits).
 5. **Re-apply fork code fixes**: diff our patches in isolation with
    `git diff <prev-base-tag>..main -- src/` to see what's ours; re-apply anything
    upstream hasn't absorbed (currently: `registry.rs` shell-function + curl/wget pipe skips).
-6. **Identity**: `scripts/fork-hygiene.sh --fix`, then scrub any telemetry residue
-   from docs by hand. Restore fork-specific `CLAUDE.md` from the old `main` if the
-   branch switch replaced it; fix its doc-links to the current layout.
+6. **Identity + fork artifacts**: `scripts/fork-hygiene.sh --fix`, then scrub any
+   telemetry residue from docs by hand. Restore fork-only files absent from the upstream
+   base — `scripts/fork-hygiene.sh`, `scripts/ship.sh`, the fork `CLAUDE.md`,
+   `docs/bugs/` — from the old `main` if the branch switch dropped them; fix doc-links
+   to the current layout. (`git checkout main -- scripts/ship.sh scripts/fork-hygiene.sh`.)
 7. **Rationalize `.claude/` skills**: skills are checked into the repo, so upstream
    ones land on every catchup carrying upstream assumptions. Audit `.claude/skills/*`
    (and `.claude/commands/*`) against fork reality — the worst offender is **`/ship`**
