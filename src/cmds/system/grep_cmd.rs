@@ -70,16 +70,23 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         eprintln!("grep: '{}' in {}", pattern_display, path);
     }
 
-    // Forward the user's args verbatim to rg, fixing two grep-isms:
-    //  - strip -r/--recursive (rg is recursive by default; rg -r means --replace)
+    // Forward the user's args to rg, fixing two grep-isms that would corrupt output:
+    //  - strip grep's -r/-R (recursive) — CRITICAL: rg's -r is --replace and TAKES A
+    //    VALUE, so a grep-style `-rn` parses as `--replace=n` and silently rewrites
+    //    every match to "n" (e.g. `def foo` -> `n foo`). rg is recursive by default,
+    //    so dropping -r/-R is always safe. Must handle combined bundles (-rn, -rln).
     //  - translate BRE alternation \| → | on the pattern token (grep BRE vs rg regex)
     let mut user_args: Vec<String> = Vec::with_capacity(args.len());
     for (i, a) in args.iter().enumerate() {
-        if a == "-r" || a == "--recursive" {
-            continue;
-        }
         if Some(i) == pattern_idx {
             user_args.push(a.replace(r"\|", "|"));
+            continue;
+        }
+        if a.starts_with('-') && a.len() > 1 {
+            if let Some(sanitized) = strip_grep_recursive(a) {
+                user_args.push(sanitized);
+            }
+            // None → the flag was solely grep-recursive (e.g. `-r`); drop it entirely.
         } else {
             user_args.push(a.clone());
         }
@@ -236,6 +243,37 @@ fn locate_pattern(args: &[String]) -> (Option<usize>, Option<String>, String) {
         pattern,
         path.unwrap_or_else(|| ".".to_string()),
     )
+}
+
+/// Remove grep's recursive flag (`-r`/`-R`, long forms) from a flag token before it
+/// reaches ripgrep, where `-r` is `--replace` (value-taking) and would rewrite every
+/// match. Returns the rewritten flag, or `None` if nothing survives (e.g. bare `-r`).
+/// Handles combined short bundles by dropping only the `r`/`R` character: `-rn` → `-n`,
+/// `-rln` → `-ln`, while preserving value-taking flags and their values (`-A3`, `-tpy`).
+fn strip_grep_recursive(tok: &str) -> Option<String> {
+    if let Some(long) = tok.strip_prefix("--") {
+        return match long {
+            "recursive" | "dereference-recursive" => None,
+            _ => Some(tok.to_string()),
+        };
+    }
+    if let Some(rest) = tok.strip_prefix('-') {
+        let mut out = String::from("-");
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            if c == 'r' || c == 'R' {
+                continue; // grep recursive — rg recurses by default; drop the char
+            }
+            out.push(c);
+            if SHORT_VALUE_CHARS.contains(&c) {
+                // Remainder is this flag's value (e.g. `-tpy`, `-A3`) — keep verbatim.
+                out.extend(chars);
+                break;
+            }
+        }
+        return if out == "-" { None } else { Some(out) };
+    }
+    Some(tok.to_string())
 }
 
 /// Strip rg-only flags (and their separate-token values) so the grep fallback,
@@ -513,6 +551,38 @@ mod tests {
         // After `--`, a leading-dash token is the pattern, not a flag.
         let (_, pat, _) = locate_pattern(&sv(&["--", "-weird-pattern"]));
         assert_eq!(pat.as_deref(), Some("-weird-pattern"));
+    }
+
+    // --- CRITICAL: grep -r/-R must be stripped before rg sees it (rg -r = --replace) ---
+
+    #[test]
+    fn test_strip_grep_recursive_bundle_prevents_replace_mangling() {
+        // THE GHOST BUG: `grep -rn def` -> rg `--replace=n` rewrites `def` to `n`.
+        // -rn must become -n (recursive dropped, line-numbers kept).
+        assert_eq!(strip_grep_recursive("-rn").as_deref(), Some("-n"));
+        assert_eq!(strip_grep_recursive("-rln").as_deref(), Some("-ln"));
+        assert_eq!(strip_grep_recursive("-Rn").as_deref(), Some("-n"));
+        assert_eq!(strip_grep_recursive("-rni").as_deref(), Some("-ni"));
+    }
+
+    #[test]
+    fn test_strip_grep_recursive_standalone_dissolves() {
+        assert_eq!(strip_grep_recursive("-r"), None);
+        assert_eq!(strip_grep_recursive("-R"), None);
+        assert_eq!(strip_grep_recursive("--recursive"), None);
+        assert_eq!(strip_grep_recursive("--dereference-recursive"), None);
+    }
+
+    #[test]
+    fn test_strip_grep_recursive_preserves_value_flags_and_their_values() {
+        // A value-taking flag's value must survive even if it contains 'r'/'R'.
+        assert_eq!(strip_grep_recursive("-tpy").as_deref(), Some("-tpy"));
+        assert_eq!(strip_grep_recursive("-A3").as_deref(), Some("-A3"));
+        // `-e` takes the pattern as its value; an "r" there is data, not a flag.
+        assert_eq!(strip_grep_recursive("-er").as_deref(), Some("-er"));
+        // No r/R at all: unchanged.
+        assert_eq!(strip_grep_recursive("-li").as_deref(), Some("-li"));
+        assert_eq!(strip_grep_recursive("--type").as_deref(), Some("--type"));
     }
 
     #[test]
