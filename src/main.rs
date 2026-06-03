@@ -1124,6 +1124,22 @@ const RTK_META_COMMANDS: &[&str] = &[
     "rewrite",
 ];
 
+/// Message for a command that cannot be run as a binary, or `None` if it resolves
+/// on PATH. Distinguishes a missing command from an existing-but-non-executable file
+/// so a fallback spawn failure is never misreported as a file-permission problem (the
+/// misleading "[rtk: Permission denied (os error 13)]" that execvp's PATH scan emits).
+fn unrunnable_command_message(name: &str) -> Option<String> {
+    if core::utils::resolve_binary(name).is_ok() {
+        return None;
+    }
+    let p = std::path::Path::new(name);
+    if p.is_file() {
+        Some(format!("rtk: {}: not executable (permission denied)", name))
+    } else {
+        Some(format!("rtk: {}: command not found", name))
+    }
+}
+
 fn run_fallback(parse_error: clap::Error) -> Result<i32> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
@@ -1140,6 +1156,18 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
 
     let raw_command = args.join(" ");
     let error_message = core::utils::strip_ansi(&parse_error.to_string());
+
+    // If args[0] can't be resolved to a runnable binary, spawning it is doomed: on
+    // some PATH layouts execvp's directory scan returns EACCES, which we surfaced
+    // verbatim as "[rtk: Permission denied (os error 13)]" — reading as a
+    // file-permission problem on the user's files when it is nothing of the sort
+    // (e.g. `cat a b c` rewritten to `rtk read …` clap-failing, then falling back to
+    // exec the shell builtin `read`). Report the real situation and skip the spawn.
+    if let Some(msg) = unrunnable_command_message(&args[0]) {
+        core::tracking::record_parse_failure_silent(&raw_command, &error_message, false);
+        eprintln!("{}", msg);
+        return Ok(127);
+    }
 
     // Start timer before execution to capture actual command runtime
     let timer = core::tracking::TimedExecution::start();
@@ -2471,6 +2499,41 @@ mod tests {
     use super::*;
     use clap::Parser;
     use std::cell::Cell;
+
+    // Regression: an unresolved command must report "command not found" — NOT the
+    // misleading "[rtk: Permission denied (os error 13)]" that the doomed fallback
+    // spawn used to surface (read as a file-permission failure on the user's files).
+    #[test]
+    fn test_unrunnable_command_message_not_found() {
+        let msg = unrunnable_command_message("zzz_definitely_not_a_real_cmd_42");
+        assert_eq!(
+            msg.as_deref(),
+            Some("rtk: zzz_definitely_not_a_real_cmd_42: command not found")
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_unrunnable_command_message_resolves_real_binary() {
+        // `sh` is on PATH on any unix dev/CI box → resolves → no error message.
+        assert_eq!(unrunnable_command_message("sh"), None);
+    }
+
+    #[test]
+    fn test_unrunnable_command_message_non_executable_file() {
+        // An existing-but-non-executable file is reported as a permission issue,
+        // distinct from a missing command.
+        let dir = std::env::temp_dir();
+        let path = dir.join("rtk_test_non_exec_marker.txt");
+        std::fs::write(&path, b"data").expect("write temp file");
+        let name = path.to_string_lossy().into_owned();
+        let msg = unrunnable_command_message(&name);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            msg.as_deref(),
+            Some(format!("rtk: {}: not executable (permission denied)", name).as_str())
+        );
+    }
 
     #[test]
     fn test_git_commit_single_message() {
