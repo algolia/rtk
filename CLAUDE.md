@@ -247,6 +247,43 @@ upstream tag (see `git log` for prior `fork: upstream catchup ...` commits).
 10. **Gate**: `cargo fmt --all && cargo clippy --all-targets && cargo test --all`
    and `scripts/fork-hygiene.sh`. All green → squash-commit → tag `vX.Y.Z-algolia.N`.
 
+## Change Management — Bug Sweeps & Fixes
+
+When working a batch of `docs/bugs/` reports (or any "fix the reported bugs" pass), follow
+this loop. It exists because a 2026-06-25 sweep found that **5 of 9 reports were already
+fixed** — the sessions had just run a stale installed binary.
+
+1. **Reproduce against a FRESH build, never the installed binary.** Build
+   `target/release/rtk` from the branch under test and run each report's *exact* command
+   (the reporter's exact flags — simplified repros falsely exonerate). The installed `rtk`
+   may lag the repo by one or more releases; testing it inverts every conclusion. Reports
+   record `rtk version:` for exactly this reason — compare it to `Cargo.toml`.
+2. **Before re-fixing, ask "are we already ahead?"** Diff against `upstream/master` and
+   check whether the fix is ours-only (e.g. an OPEN upstream PR) or already upstream. A
+   clean catchup that *regresses* fork-only fixes is the wrong reflex — see
+   [Upstream Catchup Procedure](#upstream-catchup-procedure). Catchup and bug-fixing are
+   separate timescales; don't block one on the other.
+3. **Group by root cause, not per report.** One code change often closes several repros
+   (the sweep's `-h`/format-mode change fixed three). Map repro → root cause → fix first.
+4. **Fix or document — never ship an unsafe guess.** If the correct fix needs information
+   the code can't recover (e.g. the hook collapses `grep` and `rg` to one dialect-blind
+   handler), do NOT translate on a guess — it trades a loud failure for a silent one.
+   Document the limitation + workaround in the report, and file the real fix as a tracked
+   follow-up (often "land with the next catchup").
+5. **Annotate every report with verified status** (`✅ RESOLVED in vX` / `🔶 KNOWN
+   LIMITATION` / `not reproducible`), citing the commit and the re-verification. Keep the
+   `docs/bugs/AUDIT-*.md` index in sync.
+6. **Verify the fix by re-running the repro matrix on the rebuilt binary** — not just
+   `cargo test`. Unit tests check logic; the matrix proves each live row flipped to fixed.
+   Then the full gate + `scripts/fork-hygiene.sh`.
+7. **Install once, at the end, at the bumped version.** Installing mid-pass recreates the
+   deploy gap. Bump `Cargo.toml`, `cargo install --path .`, confirm `rtk --version`.
+8. **Release with a bug taxonomy, not a bare list.** The release notes / CHANGELOG should
+   carry the *shape* of what was fixed: count, severity split, root-cause families
+   (input-rewrite vs output-mangling vs crash), and the silent-vs-loud ratio (a tool that
+   exits 0 with wrong output is more dangerous than one that crashes). See
+   `v0.42.0-algolia.4` notes for the template.
+
 ## Plan Execution Protocol
 
 When user provides a numbered plan (QW1-QW4, Phase 1-5, sprint tasks, etc.):

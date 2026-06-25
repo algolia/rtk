@@ -138,6 +138,23 @@ Four strategies applied per command type:
 3. **Truncation** - Keeps relevant context, cuts redundancy
 4. **Deduplication** - Collapses repeated log lines with counts
 
+## Reliability (Algolia fork)
+
+A filtering proxy is only useful if its output is *faithful*. The Algolia fork treats every
+mis-rewrite as a tracked bug under [`docs/bugs/`](docs/bugs/) and fixes by **root cause**, not
+symptom. Failures fall into two families:
+
+| Family | What breaks | Example |
+|--------|-------------|---------|
+| **input-rewrite** | flag/dialect collisions when proxying `grep`↔`rg` | `grep -r` → rg's `--replace`; BRE `(` → rg ERE group |
+| **output-mangling** | compaction that breaks byte-faithfulness | `git diff` → non-applicable summary; truncation through a `>` redirect |
+
+The insidious ones exit `0` with **wrong-but-plausible output** rather than crashing — so the
+fork's rule is: read-only inspection (`grep`/`head`/`git diff` to a file or pipe) must stay
+byte-faithful, and compaction is reserved for interactive/agent views where it can't corrupt
+captured data. The most recent sweep (`v0.42.0-algolia.4`) closed 9 such reports; see the
+[release notes](https://github.com/algolia/rtk/releases/tag/v0.42.0-algolia.4) for the taxonomy.
+
 ## Commands
 
 ### Files

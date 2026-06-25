@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.42.0-algolia.4] (2026-06-25)
 
+_Reliability sweep of the command-proxy layer: **9 reports** (5 High, 4 Medium) across two
+mechanism families — **5 output-mangling** (compaction breaking byte-faithfulness) and **3
+input-rewrite** (flag/dialect collisions when proxying `grep`↔`rg`), plus **1 crash**. **8 of
+9 exited `0` with wrong or misleading output**; only the EACCES case failed loudly — the silent
+class is the dangerous one. **5 of 9 were already fixed in `algolia.3`** (a deploy gap — the
+reporting sessions ran the installed `algolia.2`); 3 fixed here; 1 documented as a known
+limitation. Full taxonomy in the [`v0.42.0-algolia.4` release notes](https://github.com/algolia/rtk/releases/tag/v0.42.0-algolia.4)._
+
 ### Fixes
 
 * **grep:** strip grep's `-h` (`--no-filename`) before invoking ripgrep, where `-h` is rg's `--help`. A combined `grep -rhoE PATTERN dir` survived the `-r`/`-E` strip as `-ho`, and rg then dumped its entire help text instead of searching. The literal `-h` is dropped (`-rhoE` → `-o`); in output-format mode the no-filename *intent* is preserved by adding rg's own `--no-filename`, so aggregating pipelines like `grep -rhoE … | sort | uniq -c` count by match, not by `file:match`.
