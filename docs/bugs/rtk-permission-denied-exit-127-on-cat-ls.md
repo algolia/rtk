@@ -1,5 +1,10 @@
 # RTK crashes with `[rtk: Permission denied (os error 13)]` on `cat` / `ls` / `head`
 
+> ✅ **RESOLVED in 0.42.0-algolia.3** (verified 2026-06-25 against a fresh `main` build).
+> An unrunnable fallback command now reports `command not found` / `not executable` instead of the
+> misleading `EACCES` exit 127 (commit `a96bee8`). Re-verified: multi-file `cat a b c`, `cat a b | head`
+> run cleanly (exit 0). The reporting session ran the installed `algolia.2` binary — a deploy gap.
+
 **Date:** 2026-06-03
 **Severity:** High (command silently fails; exit 127 returned; caller must fall back to a different tool)
 **Component:** RTK hook / internal file-system access

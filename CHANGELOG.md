@@ -5,6 +5,18 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0-algolia.4] (2026-06-25)
+
+### Fixes
+
+* **grep:** strip grep's `-h` (`--no-filename`) before invoking ripgrep, where `-h` is rg's `--help`. A combined `grep -rhoE PATTERN dir` survived the `-r`/`-E` strip as `-ho`, and rg then dumped its entire help text instead of searching. The literal `-h` is dropped (`-rhoE` → `-o`); in output-format mode the no-filename *intent* is preserved by adding rg's own `--no-filename`, so aggregating pipelines like `grep -rhoE … | sort | uniq -c` count by match, not by `file:match`.
+* **grep:** stop forcing `-n`/`-H` onto ripgrep in output-format mode (`-c`/`-l`/`-L`/`-o`/`-Z`). The injected columns prepended a `file:` prefix GNU grep omits for a single file — `grep -c file` returned `file:3` instead of a bare `3` (and `grep -o` gained `file:line:` noise). Regroup-support flags are now added only when rtk actually regroups.
+* **git:** pass `git diff` through verbatim instead of rewriting it into a `--- Changes ---` summary with `+N -M` counts. The summary was not a valid patch — `git apply`/`patch`/`git am` rejected it and the changed lines were discarded — so `git diff > foo.diff` produced an unusable file. Commit display (`git show`) keeps its own compaction; `--stat`/`--no-compact` are unaffected.
+
+### Known limitations
+
+* **grep:** the proxy executes ripgrep for both `grep` and `rg` invocations and cannot tell which the caller typed, so it cannot reliably reconcile grep's BRE dialect with rg's ERE/Rust-regex dialect (a literal `(` in a BRE `grep` pattern errors as an unclosed group; the existing `\|`→`|` alternation rewrite has the inverse hazard for genuine `rg` patterns). Workaround: `grep -F` for fixed strings, or `rtk proxy grep …` for raw grep. A proper fix (route by source-tool identity) is tracked for the next upstream catchup.
+
 ## [0.42.0-algolia.3] (2026-06-04)
 
 ### Fixes

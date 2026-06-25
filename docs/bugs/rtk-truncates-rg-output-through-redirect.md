@@ -1,5 +1,10 @@
 # RTK truncates `rg`/`grep` output to ~25 rows even through a file redirect
 
+> ✅ **RESOLVED in 0.42.0-algolia.3** (verified 2026-06-25 against a fresh `main` build).
+> When stdout is a regular file, rtk now emits the complete unregrouped result (commit `80d7a68`).
+> Re-verified: `rtk rg -n 'def m' f.py > out.txt` wrote all 60/60 matches. The reporting session
+> ran the installed `algolia.2` binary — a deploy gap, not an open code bug.
+
 **Date:** 2026-06-03
 **Severity:** High (silent data loss — dropped rows are invisible when output is captured, not viewed)
 **Component:** output regrouping/truncation in `rtk grep`

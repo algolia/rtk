@@ -1,5 +1,10 @@
 # RTK mangles identifiers in command OUTPUT (grep/rg/sed of source code)
 
+> ✅ **RESOLVED in 0.42.0-algolia.3** (verified 2026-06-25 against a fresh `main` build).
+> Root cause was `grep -rn`/`-nE` reaching ripgrep where `-r`/`-E` are the value-taking `--replace`/`--encoding`,
+> silently rewriting matches (`def foo` → `n foo`). Those flags are now stripped before rg (commit `d775f56`).
+> Re-verified: `grep -n "PREFIX\|reasoning" t.py` returns `SEARCH_TOOL_PREFIX`/`reasoning_tokens` intact, no `n`/`li`.
+
 **Date:** 2026-06-01
 **Severity:** High (corrupts code reading — leads to wrong conclusions about code)
 **Component:** output filtering / token-compression applied to stdout
@@ -137,3 +142,52 @@ dropping `-r` is always safe.
 Verified: `grep -rn def .`, `grep -rn reasoning .`, `grep -rln jwt_token .` all return
 verbatim content / correct file lists. Regression tests:
 `test_strip_grep_recursive_*` in grep_cmd.rs.
+
+---
+
+## Recurrence 2026-06-04 — survives on `rtk 0.42.0-algolia.2` via `rg -rl -i`
+
+The documented fix (`strip_grep_recursive` in `grep_cmd.rs`) was verified for
+`grep -rn/-rln`, but the `--replace` mangling still fires when the **caller invokes
+`rg` directly with `-rl`** (not `grep`). On `rtk 0.42.0-algolia.2`:
+
+- **Command:** `rg -rl -i "external eval|pushback|enablers.*judge|judge.*controlled" <dirs>`
+- **Observed (mangled):** matched lines rendered with the matched token collapsed to
+  `l` — e.g. `ENABLERS_TOKEN | Judge LLM` → `l LLM`, `get_enablers_judge` → `get_l`,
+  `avoids flattery.` → `avoids l.`. The leftover `l` is the `-rl` replacement value,
+  same mechanism as the `-rn`→`n` case already documented.
+- **Expected:** verbatim file content / file list, no token substitution.
+- **Confirmed real (not display):** raw `python3` read of the same files shows the
+  intact `ENABLERS_TOKEN`, `Judge LLM`, `get_enablers_judge` — so it is RTK's output
+  layer replacing matched substrings, not the files.
+- **Workaround:** bypass rtk for grep-output-bearing searches — `python3` line scan, or
+  `rtk proxy rg ...`.
+
+Root-cause note: the `-r` strip / `--replace` guard needs to cover the **`rg` entrypoint
+with combined short bundles containing `l`** (`-rl`, `-rli`, `-rl -i`), not only the
+`grep`→rg rewrite path. The match-replacement still leaks for direct `rg` calls.
+
+---
+
+## Recurrence 2026-06-25 — `rg -rln` collapses matches to `ln` (still unpatched for direct `rg`)
+
+On `rtk 0.42.0-algolia.2`, a direct `rg` call with a `-rln` bundle still mangles:
+
+- **Command:** `rg -rln 'popup-chip|mk-transit|--transit' --glob '*.css' --glob '*.scss' .`
+  (intent: list CSS files containing any of those tokens)
+- **Observed (mangled):** every matched token replaced by `ln` — `--transit` → `ln`,
+  the `--transit:` CSS custom-property line came back as `ln:`, `.transit {` as `.ln {`,
+  `var(--transit)` as `var(ln)`, and the `.popup-chip`/`.transit-lines` class names were
+  dropped from the listing entirely.
+- **Expected:** a list of matching file paths (that's what `-l` does), verbatim.
+- **Confirmed real (not display):** the immediate re-run `grep -n -- '--transit' app/globals.css`
+  (no `-r`, so no bundle collision) returned the intact `--transit: #5a3fb5;` and
+  `background: var(--transit);` — so the file is fine; RTK's `--replace=ln` ate the output.
+- **Workaround:** drop the `-r` (rg recurses by default) — `rg -ln 'pat' --glob '*.css'`
+  is unaffected; or use `grep -n` without recursive flags; or editor Read.
+
+Same mechanism as the 2026-06-04 entry: `strip_grep_recursive()` fixed the `grep`→rg
+path, but a **caller typing `rg -rln` directly** still has `-r` parsed by rg as
+`--replace`, with the bundle's trailing `ln` as the replacement value. The guard must
+also strip `-r` from short bundles on the **direct `rg` entrypoint** (`-rln` → `-ln`,
+`-rl` → `-l`), not just when rewriting `grep`.

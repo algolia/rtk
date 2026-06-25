@@ -93,12 +93,32 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         }
     }
 
+    // Output-format flags (-c/-l/-L/-o/-Z) own their own layout and pass through
+    // unregrouped (see below). In that mode the forced `-n`/`-H` would PREPEND columns
+    // GNU grep omits — `grep -c file` must be a bare count, not `file:3`; `grep -o`
+    // must be the bare match, not `file:line:match`. So inject the regroup-support flags
+    // ONLY when we will actually regroup; let rg's native format stand otherwise (its
+    // single-vs-multi-file filename rule already matches grep's).
+    let format_mode = has_format_flag(args);
+
     let mut rg_cmd = resolved_command("rg");
-    // -n line numbers; -H force filename prefix so the layout is always
-    // `file:line:content` (the parser can't otherwise tell `line:content` apart once
-    // the content holds a colon); --no-heading for flat output; --no-ignore-vcs to
-    // match grep -r and not skip .gitignore'd files (avoids silent false negatives).
-    rg_cmd.args(["-n", "-H", "--no-heading", "--no-ignore-vcs"]);
+    if format_mode {
+        rg_cmd.args(["--no-heading", "--no-ignore-vcs"]);
+        // We strip grep's `-h` before rg (where `-h` is --help), but the *intent*
+        // (--no-filename) is real and matters for aggregation: `grep -rhoE ... | sort |
+        // uniq -c` must count by match, not by `file:match`. rg has its own
+        // `--no-filename`, so honor the intent here. (Only in format mode — the regroup
+        // path force-injects `-H` and needs the filename to parse.)
+        if wants_no_filename(args) {
+            rg_cmd.arg("--no-filename");
+        }
+    } else {
+        // -n line numbers; -H force filename prefix so the layout is always
+        // `file:line:content` (the parser can't otherwise tell `line:content` apart once
+        // the content holds a colon); --no-heading for flat output; --no-ignore-vcs to
+        // match grep -r and not skip .gitignore'd files (avoids silent false negatives).
+        rg_cmd.args(["-n", "-H", "--no-heading", "--no-ignore-vcs"]);
+    }
     rg_cmd.args(&user_args);
 
     let result = exec_capture(&mut rg_cmd)
@@ -119,7 +139,7 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     //    COMPLETE result, and truncating to N rows would silently drop data into a
     //    file the caller treats as authoritative. Pipes (agent capture) and TTYs
     //    still get the compact, token-saving view — that is RTK's main job.
-    if has_format_flag(args) || stdout_is_regular_file() {
+    if format_mode || stdout_is_regular_file() {
         print!("{}", result.stdout);
         if !result.stderr.is_empty() {
             eprint!("{}", result.stderr.trim());
@@ -287,14 +307,16 @@ fn stdout_is_regular_file() -> bool {
 }
 
 /// Remove grep flags that must NOT reach ripgrep verbatim because rg either does them
-/// by default or — worse — reuses the same letter for a DIFFERENT, value-taking flag
-/// that silently swallows the pattern:
-///   `-r`/`-R` grep recursive → rg `-r` is `--replace` (value) → rewrites every match
-///   `-E`      grep ERE       → rg `-E` is `--encoding` (value) → eats the pattern
-/// rg recurses and speaks ERE by default, so dropping these is safe for grep-compat.
-/// Returns the rewritten flag, or `None` if nothing survives (e.g. bare `-r`). Handles
-/// combined short bundles by dropping only the offending char (`-rn` → `-n`,
-/// `-nE` → `-n`) while preserving value-taking flags and their values (`-A3`, `-tpy`).
+/// by default or — worse — reuses the same letter for a DIFFERENT flag with an
+/// incompatible meaning:
+///   `-r`/`-R` grep recursive    → rg `-r` is `--replace` (value) → rewrites every match
+///   `-E`      grep ERE          → rg `-E` is `--encoding` (value) → eats the pattern
+///   `-h`      grep --no-filename → rg `-h` is `--help` → dumps the help text, no search
+/// rg recurses, speaks ERE by default, and we control filename display via `-H`, so
+/// dropping these is safe for grep-compat. Returns the rewritten flag, or `None` if
+/// nothing survives (e.g. bare `-r`). Handles combined short bundles by dropping only
+/// the offending char (`-rn` → `-n`, `-rhoE` → `-o`) while preserving value-taking
+/// flags and their values (`-A3`, `-tpy`).
 fn strip_grep_only_flags(tok: &str) -> Option<String> {
     if let Some(long) = tok.strip_prefix("--") {
         return match long {
@@ -306,9 +328,10 @@ fn strip_grep_only_flags(tok: &str) -> Option<String> {
         let mut out = String::from("-");
         let mut chars = rest.chars();
         while let Some(c) = chars.next() {
-            // 'r'/'R' = grep recursive (rg default); 'E' = grep ERE (rg default).
-            // Both are value-taking in rg, so forwarding them corrupts the search.
-            if matches!(c, 'r' | 'R' | 'E') {
+            // 'r'/'R' = grep recursive (rg default); 'E' = grep ERE (rg default);
+            // 'h' = grep --no-filename (rg `-h` is --help, which dumps help instead of
+            // searching). Forwarding any of these corrupts the search, so drop them.
+            if matches!(c, 'r' | 'R' | 'E' | 'h') {
                 continue;
             }
             out.push(c);
@@ -396,6 +419,30 @@ fn token_has_format_flag(tok: &str) -> bool {
 
 fn has_format_flag(args: &[String]) -> bool {
     args.iter().any(|a| token_has_format_flag(a))
+}
+
+/// Did the caller pass grep's short `-h` (--no-filename)? We strip the literal `-h`
+/// before ripgrep (where `-h` is `--help`), so detect the intent separately to re-add
+/// rg's `--no-filename` in format mode. Respects value-flag bundles: the `h` in
+/// `-ehello` (rg `--regexp hello`) is data, not the no-filename flag.
+fn wants_no_filename(args: &[String]) -> bool {
+    args.iter().any(|tok| {
+        let Some(rest) = tok.strip_prefix('-') else {
+            return false;
+        };
+        if tok.starts_with("--") {
+            return false;
+        }
+        for c in rest.chars() {
+            if c == 'h' {
+                return true;
+            }
+            if SHORT_VALUE_CHARS.contains(&c) {
+                break; // remainder is this flag's value, not more flags
+            }
+        }
+        false
+    })
 }
 
 /// Parse one grep/rg result line into `(file, line_number, content)`.
@@ -630,6 +677,33 @@ mod tests {
         assert_eq!(strip_grep_only_flags("-R"), None);
         assert_eq!(strip_grep_only_flags("--recursive"), None);
         assert_eq!(strip_grep_only_flags("--dereference-recursive"), None);
+    }
+
+    #[test]
+    fn test_strip_grep_no_filename_h_prevents_rg_help_dump() {
+        // THE BUG: `grep -rhoE PATTERN dir` → strip r,E leaves `-ho`; rg reads `-h`
+        // as --help and dumps its entire help text instead of searching. Drop h.
+        assert_eq!(strip_grep_only_flags("-rhoE").as_deref(), Some("-o"));
+        assert_eq!(strip_grep_only_flags("-h"), None);
+        assert_eq!(strip_grep_only_flags("-rh"), None);
+        assert_eq!(strip_grep_only_flags("-hn").as_deref(), Some("-n"));
+        // 'h' inside a value-flag's value is data, not the no-filename flag.
+        assert_eq!(strip_grep_only_flags("-ehello").as_deref(), Some("-ehello"));
+    }
+
+    #[test]
+    fn test_wants_no_filename_detects_short_h() {
+        // -h intent must be detected so format mode can re-add rg's --no-filename,
+        // keeping `grep -rhoE ... | sort | uniq -c` aggregating by match, not by file.
+        assert!(wants_no_filename(&sv(&["-rhoE", "pat", "dir"])));
+        assert!(wants_no_filename(&sv(&["-h", "pat"])));
+        assert!(wants_no_filename(&sv(&["-oh", "pat"])));
+        // No -h: false.
+        assert!(!wants_no_filename(&sv(&["-rn", "pat"])));
+        // 'h' as data inside a value flag's value is not the no-filename flag.
+        assert!(!wants_no_filename(&sv(&["-ehello", "f"])));
+        // Long --no-filename is forwarded verbatim (not stripped), so not our concern here.
+        assert!(!wants_no_filename(&sv(&["--no-filename", "pat"])));
     }
 
     #[test]

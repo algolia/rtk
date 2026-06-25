@@ -1,5 +1,10 @@
 # RTK rewrites `rg` invocations to `grep`, dropping rg-only flags
 
+> ✅ **RESOLVED in 0.42.0-algolia.3** (verified 2026-06-25 against a fresh `main` build).
+> `rg` args are now forwarded to ripgrep verbatim (commit `73d8e14`); `rg -g/--glob/--type-add/-li`
+> run as ripgrep, not GNU grep. The reporting session ran the installed `algolia.2` binary — a
+> deploy gap, not an open code bug. Re-verified: `rtk rg -li "x" -g '*.py' .` searches correctly.
+
 **Date:** 2026-06-03
 **Severity:** Medium (breaks ripgrep usage; silent semantic change of the command run)
 **Component:** command rewrite / hook (input side, not output)
@@ -170,3 +175,33 @@ rg is ERE by default, so dropping `-E` is safe.
 Verified: `grep -nE 'def' x.py` returns matches (was "unknown encoding"). Guarded
 by `test_strip_grep_only_extended_regex_E` (unit) and
 `grep_extended_regex_ere_flag_is_handled` (behavioral, `tests/grep_flag_regression.rs`).
+
+---
+
+## Occurrence 2026-06-08 — reverse direction: `grep --include` rewritten to `rg`
+
+**rtk version:** (current session)
+**Component:** command rewrite / hook (input side)
+
+Same root cause, opposite substitution: a GNU `grep` invocation was executed as
+`rg`, so the grep-only `--include` glob flag hit ripgrep and was rejected.
+
+### Observed
+```
+$ grep -rIli "black sesame" --include='*.jsonl' .
+rg: unrecognized flag --include
+
+similar flags that are available: --include-zero
+```
+Notably, an *earlier* `grep -rIli ... --include='*.jsonl'` call in the same
+session (wrapped in a `for` loop) ran fine — so the rewrite is inconsistent:
+the same `--include` flag survives in one invocation and is fatal in another.
+This suggests the rewrite heuristic depends on surrounding command structure
+(loop/compound vs. bare invocation), not just the binary name.
+
+### Expected
+Either keep `grep` as `grep` (so `--include` is valid), or translate
+`--include='*.jsonl'` to the rg equivalent `-g '*.jsonl'` when substituting.
+
+### Workaround
+Rewrite by hand to rg-native syntax: `rg -li "PATTERN" -g '*.jsonl' .`

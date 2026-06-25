@@ -163,8 +163,8 @@ where
 
 fn run_diff(
     args: &[String],
-    max_lines: Option<usize>,
-    verbose: u8,
+    _max_lines: Option<usize>,
+    _verbose: u8,
     global_args: &[String],
 ) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
@@ -210,10 +210,22 @@ fn run_diff(
         return Ok(0);
     }
 
-    // Default RTK behavior: stat first, then compacted diff
+    // Default behavior: pass the unified diff through VERBATIM.
+    //
+    // `git diff` is already a compact, structured format, and its content is only
+    // losslessly representable AS a unified diff. Summarizing it into a `--- Changes ---`
+    // header + `+N -M` count produces text that is NOT a patch — `git apply`, `patch`,
+    // and `git am` all reject it, and the actual added/removed lines are discarded — so
+    // anyone running `git diff > foo.diff` to ship a reproducible patch got an unusable
+    // file. Token compaction is not worth breaking the primary downstream use. (Commit
+    // display via `git show` keeps its own compaction in `run_show`; `--stat` and
+    // `--no-compact` short-circuit above.)
+    //
+    // NOTE: this is a deliberate exemption from the repo's "≥60% savings per filter"
+    // target — for `git diff`, correctness (a valid, applicable patch) outranks token
+    // savings, and the unified diff is already compact.
     let mut cmd = git_cmd(global_args);
-    cmd.arg("diff").arg("--stat");
-
+    cmd.arg("diff");
     for arg in args {
         cmd.arg(arg);
     }
@@ -233,36 +245,13 @@ fn run_diff(
         return Ok(result.exit_code);
     }
 
-    if verbose > 0 {
-        eprintln!("Git diff summary:");
-    }
-
-    // Print stat summary first
-    println!("{}", result.stdout.trim());
-
-    // Now get actual diff but compact it
-    let mut diff_cmd = git_cmd(global_args);
-    diff_cmd.arg("diff");
-    for arg in args {
-        diff_cmd.arg(arg);
-    }
-
-    let diff_result = exec_capture(&mut diff_cmd).context("Failed to run git diff")?;
-
-    let mut final_output = result.stdout.clone();
-    if !diff_result.stdout.is_empty() {
-        println!("\n--- Changes ---");
-        let compacted = compact_diff(&diff_result.stdout, max_lines.unwrap_or(500));
-        println!("{}", compacted);
-        final_output.push_str("\n--- Changes ---\n");
-        final_output.push_str(&compacted);
-    }
+    print!("{}", result.stdout);
 
     timer.track(
         &format!("git diff {}", args.join(" ")),
-        &format!("rtk git diff {}", args.join(" ")),
-        &format!("{}\n{}", result.stdout, diff_result.stdout),
-        &final_output,
+        &format!("rtk git diff {} (verbatim)", args.join(" ")),
+        &result.stdout,
+        &result.stdout,
     );
 
     Ok(0)
