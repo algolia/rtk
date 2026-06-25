@@ -29,7 +29,10 @@ FIX=0
 # Excluded from the leak scan so the gate isn't self-tripped.
 # --hidden so .github/, .rtk/ etc. are scanned (ripgrep skips dotdirs by default);
 # !.git keeps the object store out.
-GATE_EXCLUDES=(--hidden --glob '!.git' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md')
+# docs/upstream/ holds drafts of contributions back TO upstream (PR base/head refs,
+# issue links) — naming rtk-ai/rtk there is correct, not a leak; it is internal, not
+# user-facing fork identity.
+GATE_EXCLUDES=(--hidden --glob '!.git' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md' --glob '!docs/upstream/**')
 # Shared excludes for --fix replacements (never rewrite the rules doc, the script, or legal text)
 FIX_EXCLUDES=(--hidden --glob '!.git' --glob '!Cargo.lock' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE')
 
