@@ -1,14 +1,18 @@
 # RTK proxies `grep` through ripgrep, breaking BRE patterns (literal `(` → "unclosed group")
 
-> 🔶 **KNOWN LIMITATION as of 0.42.0-algolia.4** (confirmed 2026-06-25 against a fresh `main` build).
-> The hook rewrites BOTH `grep` and `rg` to `rtk grep`, so the handler is **dialect-blind** — it cannot
-> tell whether the caller wrote a BRE `grep` pattern (literal `(`) or an ERE `rg` pattern (group `(`).
-> A BRE→ERE translator would therefore be a *guess* that silently corrupts genuine `rg` patterns — the
-> exact silent-reinterpretation hazard this report warns about — so we deliberately do NOT translate.
-> (The existing `\|`→`|` alternation rewrite shares this hazard for `rg 'a\|b'`; noted, not expanded.)
-> **Workaround:** `grep -F 'rpc('` for fixed strings, or `rtk proxy grep …` for raw grep.
-> **Proper fix** (route by source-tool identity so grep speaks BRE and rg speaks ERE) is tracked to land
-> with the next upstream catchup, in the rewrite/permission layer upstream just hardened.
+> ✅ **PARTIALLY RESOLVED (unreleased, commit `cba316f`)** — the dialect blindness is gone:
+> `grep` and `rg` now route to separate handlers. The genuine-`rg` half of this report is FIXED —
+> `rg 'a\|b'` keeps `\|` as a literal pipe (RE2) instead of rewriting it to alternation
+> (scoreboard rows `rg -c 'foo\|bar'` and `rg 'foo\|bar'`, was CORRUPT, now OK/COMPACTED).
+>
+> 🔶 **STILL OPEN (grep BRE half):** `grep 'rpc('` (BRE literal paren) is still forwarded to
+> ripgrep's RE2 and errors "unclosed group". Now that routing guarantees the pattern is genuinely
+> BRE, a BRE→ERE translation is *safe* to add (it can no longer corrupt an `rg` group pattern) —
+> tracked as the follow-up (literal `(` `)` `{` `}` `\{n\}`). Scoreboard keeps `grep -c 'rpc('`
+> tagged `known_bug` until then. **Workaround:** `grep -F 'rpc('` or `rtk proxy grep …`.
+>
+> *(original: confirmed 2026-06-25; the hook rewrote BOTH `grep` and `rg` to `rtk grep`, making the
+> handler dialect-blind — it could not tell a BRE `grep` pattern from an ERE `rg` one.)*
 
 **Date:** 2026-06-10
 **Severity:** Medium (silently changes regex dialect; valid `grep` patterns error out or, worse, could match differently without erroring)

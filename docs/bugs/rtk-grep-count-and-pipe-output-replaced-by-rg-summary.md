@@ -8,6 +8,10 @@
 > 3. **`grep PATTERN file | head` showing "N matches in M files:" instead of raw lines** → **BY DESIGN.**
 >    That is rtk's core pipe-compaction (its whole reason to exist), and the counts are now correct. If you
 >    need byte-faithful grep lines, redirect to a file (`> out.txt`, emitted verbatim) or use `rtk proxy grep`.
+> 4. **`rg --files` emitting a bogus "N matches in 0 files" summary** → ✅ **FIXED (unreleased, commit
+>    `cba316f`).** `--files` is a path-list format with no `file:line:content` to regroup; it is now
+>    recognized as a format flag and passed through unmangled. Scoreboard row `rg --files src` (was
+>    CORRUPT, now OK). Compacting the path list further is a possible future enhancement.
 
 **Date:** 2026-06-25
 **Severity:** High (silent data loss + near-misread: a real "8 matches" was shown as "0 matches", almost leading to a wrong "feature is broken" conclusion)

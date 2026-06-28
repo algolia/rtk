@@ -1,11 +1,17 @@
 # RTK strips genuine ripgrep short flags (`-r` replace, `-E` encoding), corrupting real `rg` invocations
 
-> 🔶 **OPEN as of 0.42.0-algolia.4** (discovered 2026-06-28 against a fresh `main` build).
-> The `rtk grep` handler assumes every caller is GNU `grep` and strips `-r`/`-R`/`-E`/`-h`
+> ✅ **RESOLVED (unreleased, commit `cba316f`)** — `rg` now routes to a native `rtk rg`
+> handler that forwards every argument verbatim, so `-r` (`--replace`) and `-E` (`--encoding`)
+> reach ripgrep with their genuine meaning. Re-verified by the differential scoreboard row
+> `rg -r REPL world rep.txt` (was CORRUPT "No such file", now COMPACTED, faithful to truth).
+> See `tests/grep_rg_scoreboard.rs`.
+>
+> 🔶 *(original report, discovered 2026-06-28 against a fresh `main` build)*
+> The `rtk grep` handler assumed every caller is GNU `grep` and stripped `-r`/`-R`/`-E`/`-h`
 > before forwarding to ripgrep — correct for `grep`, but these are *valid, differently-meaning*
-> flags when the caller actually typed `rg`. Root cause: the hook collapses `grep` and `rg` to
-> a single dialect-blind `rtk grep` (`src/discover/rules.rs:92-94`). Same keystone as
-> `rtk-proxies-grep-as-rg-breaks-bre-regex.md`. **Proper fix:** route by source-tool identity.
+> flags when the caller actually typed `rg`. Root cause: the hook collapsed `grep` and `rg` to
+> a single dialect-blind `rtk grep`. Fixed by splitting the registry rule and threading a
+> `Dialect` so the `rg` path skips all grep-isms.
 
 **Date:** 2026-06-28
 **Severity:** Medium (genuine `rg --replace`/`--encoding` short forms break; `-r` fails loudly here, but the class includes silent mis-search)
