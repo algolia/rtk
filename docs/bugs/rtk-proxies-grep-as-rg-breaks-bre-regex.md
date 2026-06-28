@@ -1,15 +1,14 @@
 # RTK proxies `grep` through ripgrep, breaking BRE patterns (literal `(` → "unclosed group")
 
-> ✅ **PARTIALLY RESOLVED (unreleased, commit `cba316f`)** — the dialect blindness is gone:
-> `grep` and `rg` now route to separate handlers. The genuine-`rg` half of this report is FIXED —
-> `rg 'a\|b'` keeps `\|` as a literal pipe (RE2) instead of rewriting it to alternation
-> (scoreboard rows `rg -c 'foo\|bar'` and `rg 'foo\|bar'`, was CORRUPT, now OK/COMPACTED).
->
-> 🔶 **STILL OPEN (grep BRE half):** `grep 'rpc('` (BRE literal paren) is still forwarded to
-> ripgrep's RE2 and errors "unclosed group". Now that routing guarantees the pattern is genuinely
-> BRE, a BRE→ERE translation is *safe* to add (it can no longer corrupt an `rg` group pattern) —
-> tracked as the follow-up (literal `(` `)` `{` `}` `\{n\}`). Scoreboard keeps `grep -c 'rpc('`
-> tagged `known_bug` until then. **Workaround:** `grep -F 'rpc('` or `rtk proxy grep …`.
+> ✅ **RESOLVED (unreleased).** Fixed in two steps:
+> 1. `cba316f` — `grep` and `rg` route to separate handlers, ending the dialect blindness.
+>    The genuine-`rg` half (`rg 'a\|b'` keeping `\|` as a literal pipe) was fixed here.
+> 2. `6164ac6` — `bre_to_ere` translates the grep BRE pattern to RE2 before forwarding, so
+>    `grep 'rpc('` (literal paren) becomes `rpc\(` and matches instead of erroring. The toggle
+>    covers `( ) { } | + ?`; `-E`/`-F`/`-P` opt out (already rg-compatible). Now safe precisely
+>    because routing guarantees the pattern is genuinely BRE — it can never corrupt an rg group.
+> Re-verified: scoreboard rows `grep -c 'rpc('` (=2), `grep -c 'foo\|bar'` (BRE alternation, =3),
+> and `grep -Fc 'rpc('` (fixed strings, no translation, =2) all OK. Whole board green.
 >
 > *(original: confirmed 2026-06-25; the hook rewrote BOTH `grep` and `rg` to `rtk grep`, making the
 > handler dialect-blind — it could not tell a BRE `grep` pattern from an ERE `rg` one.)*

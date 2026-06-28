@@ -23,7 +23,7 @@ bugs are upstream's own design too). We refixed locally instead.
 | grep `-rhoE` dumps rg help | ✅ fixed | **algolia.4** — strip short `-h` (rg `--help`) |
 | grep `-c`/format filename prefix | ✅ fixed | **algolia.4** — no forced `-n`/`-H` in format mode |
 | git diff → non-applicable summary | ✅ fixed | **algolia.4** — verbatim passthrough (patch applies) |
-| grep BRE literal paren | 🔶 partial | identity-routing landed (`cba316f`); rg `\|` over-match FIXED, grep BRE→ERE translation still tracked |
+| grep BRE literal paren | ✅ fixed | **unreleased** — routing (`cba316f`) + `bre_to_ere` translation (`6164ac6`); whole scoreboard green |
 | rg `\|` over-match / `-r`,`-E` strip / `--files` summary | ✅ fixed | **unreleased** (`cba316f`) — native `rtk rg` handler (verbatim, dialect-aware); proven by `tests/grep_rg_scoreboard.rs` |
 
 **Two takeaways for the maintainer:** (1) 5 of 9 were a *deploy gap* — fixed in `algolia.3`
