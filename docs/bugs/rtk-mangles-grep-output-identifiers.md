@@ -191,3 +191,23 @@ path, but a **caller typing `rg -rln` directly** still has `-r` parsed by rg as
 `--replace`, with the bundle's trailing `ln` as the replacement value. The guard must
 also strip `-r` from short bundles on the **direct `rg` entrypoint** (`-rln` → `-ln`,
 `-rl` → `-l`), not just when rewriting `grep`.
+
+---
+
+## Recurrence 2026-06-26 — `rg -rln` still collapses identifiers to `ln` on `0.42.0-algolia.4`
+
+The `-rln`→`-ln` short-bundle strip on the **direct `rg` entrypoint** proposed in the
+2026-06-25 entry is confirmed **still un-applied** as of `rtk 0.42.0-algolia.4`.
+
+- **Command:** `rg -rln 'outdoor|role|entity' src/domovoy --glob '*.py' | rg -i 'ha|home_assist|poll|observ'`
+  (intent: list Python files mentioning those identifiers).
+- **Observed (mangled):** every `role` → `ln`, `outdoor` → `ln`, `not_role` → `not_ln`,
+  `home_assistant` truncated to `home_assist` — e.g. real source
+  `latest_observation(metric="temperature", role="outdoor")` rendered as
+  `latest_observation(metric="temperature", not_ln="ln")`. The substitution made the
+  output actively misleading about the code's real parameter names (I nearly mis-traced
+  the T_out role-tagging logic because of it).
+- **Confirmed real (not the file):** `Read` of `observations.py:227` showed the true
+  params are `role` / `not_role` matching `attributes.role == "outdoor"` — file intact;
+  RTK's `--replace=ln` (from the `-rln` bundle) ate the tokens.
+- **Workaround:** drop `-r` (`rg -ln 'pat' src/`) or use the Read tool.

@@ -142,3 +142,33 @@ Expected: BRE semantics (literal `{`, `\|` alternation) since the user typed `gr
 Workaround: re-issued with `grep -E` and no brace (`type Props`), which RTK maps to
 `rg` cleanly. Same root cause as this report: silently swapping `grep`→`rg` changes
 the regex dialect, so BRE-valid patterns (`\|`, bare `{`, `\{n\}`) error or mismatch.
+
+---
+
+## CONFIRMED 2026-06-28 — the mirror hazard fires: genuine `rg '\|'` over-matches (rtk 0.42.0-algolia.4)
+
+The header note warned that the `\|`→`|` alternation rewrite "shares this hazard
+for `rg 'a\|b'`". It is no longer hypothetical — **measured against a fresh
+`main` build** (`target/release/rtk`), bypassing the hook for the control with
+`RTK_DISABLED=1`:
+
+```
+$ printf 'foo\nbar\nfoo|bar\n' > disc.txt
+$ RTK_DISABLED=1 rg -c 'foo\|bar' disc.txt     # genuine ripgrep
+1                                              # \| is a LITERAL pipe → matches only "foo|bar"
+$ rtk grep -c 'foo\|bar' disc.txt              # hook target
+3                                              # \| rewritten to | → ALTERNATION → matches all 3
+```
+
+This is **silent** (exit 0, plausible count) and **direction-symmetric** with
+the grep BRE bug above: the handler (`src/cmds/system/grep_cmd.rs:83`) rewrites
+`\|`→`|` on the positional pattern unconditionally — correct for a `grep` caller
+(BRE: `\|` = alternation) and **wrong for an `rg` caller** (RE2: `\|` = literal
+pipe). One handler cannot be right for both because it has lost the source-tool
+identity: the hook collapses `grep` and `rg` to `rtk grep`
+(`src/discover/rules.rs:92-94`, **identical upstream**). Same keystone as
+`rtk-strips-genuine-rg-replace-encoding-short-flags.md`.
+
+**Proper fix:** route by source-tool identity (the deferred fix this whole
+cluster points to). With identity known, `rtk grep` translates BRE and `rtk rg`
+forwards RE2 verbatim — both correct, no guessing.

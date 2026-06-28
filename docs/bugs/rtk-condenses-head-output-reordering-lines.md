@@ -1,9 +1,22 @@
 # rtk condenses `head` output, reordering and fragmenting lines
 
-> ✅ **NOT REPRODUCIBLE on 0.42.0-algolia.3** (verified 2026-06-25 against a fresh `main` build).
+> 🔴 **REOPENED — recurred on 0.42.0-algolia.4** (2026-06-26). The algolia.3 "not reproducible"
+> note below is stale; the condenser is back on a different file.
+> ✅ ~~**NOT REPRODUCIBLE on 0.42.0-algolia.3**~~ (verified 2026-06-25 against a fresh `main` build).
 > `rtk head -8 CHANGELOG.md` returns the first 8 lines verbatim, in order. The original report ran the
 > installed `algolia.2` binary; the same fixes that closed the grep/permission cluster appear to cover it.
 > Reopen with the exact command + `rtk --version` if it recurs on `algolia.3`+.
+
+## Recurrence — 2026-06-26, rtk 0.42.0-algolia.4
+
+- **Command**: `head -4 CHANGELOG.md` (a different repo's CHANGELOG.md, ~130 lines, markdown).
+- **Observed** (via Claude Code hook): line 1 `# Changelog`, line 2 blank, then line 3 was
+  `  from indoor vs outdoor temperature and alerts only on a **mismatch** with the` — a fragment from
+  deep in the file (a Sprint-3 entry), not line 3 (`## Sprint 4 — ...`), followed by `[128 more lines]`.
+- **Expected**: the first 4 lines verbatim, in order.
+- **Workaround**: re-read with the Read tool (range read) — returned the true first lines unmangled.
+- So the condenser still triggers on a plain `head -N <file>` over a markdown file > a few-hundred lines,
+  reordering + substituting deep-file fragments. Same root cause as the original report; not fixed in algolia.4.
 
 - **Date**: 2026-06-11
 - **Severity**: medium (silent output corruption — misleads the agent into believing a file is mangled when it is intact)
