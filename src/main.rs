@@ -308,7 +308,19 @@ enum Commands {
     /// are declared here on purpose — the previous `-l`/`-t` options collided with
     /// grep/rg's own `-l`/`-t` and broke flags-before-pattern invocations.
     Grep {
-        /// ripgrep/grep arguments: flags, pattern, and paths, forwarded verbatim.
+        /// grep arguments: flags, pattern, and paths. BRE-compatible (grep dialect).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Compact ripgrep - forwards all flags to ripgrep verbatim, then groups matches.
+    ///
+    /// Native rg handler: the pattern (RE2) and flags (`-r`=replace, `-E`=encoding,
+    /// `-h`=help, literal `\|`) are passed through untouched, so rtk never corrupts a
+    /// genuine ripgrep search. rtk only regroups/truncates the output. Kept separate
+    /// from `rtk grep` because ripgrep deliberately is NOT grep-compatible.
+    Rg {
+        /// ripgrep arguments: flags, pattern, and paths, forwarded verbatim.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -1785,7 +1797,8 @@ fn run_cli() -> Result<i32> {
             summary::run(&cmd, cli.verbose)?
         }
 
-        Commands::Grep { args } => grep_cmd::run(&args, cli.verbose)?,
+        Commands::Grep { args } => grep_cmd::run(&args, grep_cmd::Dialect::Grep, cli.verbose)?,
+        Commands::Rg { args } => grep_cmd::run(&args, grep_cmd::Dialect::Rg, cli.verbose)?,
 
         Commands::Init {
             global,
@@ -2470,6 +2483,7 @@ fn is_operational_command(cmd: &Commands) -> bool {
             | Commands::Kubectl { .. }
             | Commands::Summary { .. }
             | Commands::Grep { .. }
+            | Commands::Rg { .. }
             | Commands::Wget { .. }
             | Commands::Vitest { .. }
             | Commands::Prisma { .. }

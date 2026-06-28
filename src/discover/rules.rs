@@ -88,10 +88,24 @@ pub const RULES: &[RtkRule] = &[
         subcmd_savings: &[],
         subcmd_status: &[],
     },
+    // grep and rg route to SEPARATE native handlers so rtk preserves source-tool
+    // identity: grep speaks POSIX BRE/ERE and recurses only with -r, ripgrep speaks
+    // RE2 and recurses by default with colliding short flags (-r=replace, -E=encoding).
+    // Collapsing both onto one dialect silently corrupts whichever tool the caller did
+    // not type (see docs/bugs/rtk-proxies-grep-as-rg-breaks-bre-regex.md).
     RtkRule {
-        pattern: r"^(rg|grep)\s+",
+        pattern: r"^grep\s+",
         rtk_cmd: "rtk grep",
-        rewrite_prefixes: &["rg", "grep"],
+        rewrite_prefixes: &["grep"],
+        category: "Files",
+        savings_pct: 75.0,
+        subcmd_savings: &[],
+        subcmd_status: &[],
+    },
+    RtkRule {
+        pattern: r"^rg\s+",
+        rtk_cmd: "rtk rg",
+        rewrite_prefixes: &["rg"],
         category: "Files",
         savings_pct: 75.0,
         subcmd_savings: &[],

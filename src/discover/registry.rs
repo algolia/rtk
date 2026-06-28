@@ -1406,8 +1406,14 @@ mod tests {
 
     #[test]
     fn test_rewrite_rg_pattern() {
+        // rg routes to the native `rtk rg` handler (verbatim, RE2 dialect), grep to
+        // `rtk grep` (BRE-compat) — source-tool identity is preserved, not collapsed.
         assert_eq!(
             rewrite_command_no_prefixes("rg \"fn main\"", &[]),
+            Some("rtk rg \"fn main\"".into())
+        );
+        assert_eq!(
+            rewrite_command_no_prefixes("grep \"fn main\"", &[]),
             Some("rtk grep \"fn main\"".into())
         );
     }

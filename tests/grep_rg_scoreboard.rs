@@ -98,16 +98,17 @@ const CASES: &[Case] = &[
         compacts: false,
         known_bug: None,
     },
-    // BUG alpha — genuine rg literal pipe `\|` rewritten to alternation → over-count.
+    // FIXED (bug alpha) — rg dialect now forwards verbatim, so `\|` stays a literal pipe
+    // (RE2) instead of being rewritten to alternation. truth=1, rtk=1.
     Case {
         tool: "rg",
         args: &["-c", r"foo\|bar", "tests/fixtures/scoreboard/disc.txt"],
         pattern: r"foo\|bar",
         path: "tests/fixtures/scoreboard/disc.txt",
         mode: Mode::Count,
-        desc: r"rg -c 'foo\|bar' (rg: literal pipe; truth=1, rtk over-matches)",
+        desc: r"rg -c 'foo\|bar' (rg literal pipe; truth=1, was over-counted)",
         compacts: false,
-        known_bug: Some("rtk-proxies-grep-as-rg-breaks-bre-regex.md"),
+        known_bug: None,
     },
     // BUG (grep BRE) — literal paren under grep BRE; rtk feeds it to rg ERE → crash.
     Case {
@@ -120,38 +121,40 @@ const CASES: &[Case] = &[
         compacts: false,
         known_bug: Some("rtk-proxies-grep-as-rg-breaks-bre-regex.md"),
     },
-    // ---- default-mode hazard: rg \| over-match in match listing ----
+    // FIXED (bug alpha, default mode) — `\|` no longer over-matches; truth=1 line, rtk=1.
     Case {
         tool: "rg",
         args: &[r"foo\|bar", "tests/fixtures/scoreboard/disc.txt"],
         pattern: r"foo\|bar",
         path: "tests/fixtures/scoreboard/disc.txt",
         mode: Mode::Default,
-        desc: r"rg 'foo\|bar' (default; truth=1 line, rtk shows 3)",
+        desc: r"rg 'foo\|bar' (default; literal pipe, truth=1 line)",
         compacts: false,
-        known_bug: Some("rtk-proxies-grep-as-rg-breaks-bre-regex.md"),
+        known_bug: None,
     },
-    // BUG beta — genuine rg -r (--replace) short flag stripped → 'No such file'.
+    // FIXED (bug beta) — rg dialect forwards `-r`/`-E` verbatim (genuine --replace/--encoding)
+    // instead of stripping them as grep recursive/ERE. The replacement runs.
     Case {
         tool: "rg",
         args: &["-r", "REPL", "world", "tests/fixtures/scoreboard/rep.txt"],
         pattern: "world",
         path: "tests/fixtures/scoreboard/rep.txt",
         mode: Mode::Default,
-        desc: "rg -r REPL world rep.txt (rg --replace; rtk strips -r, errors)",
+        desc: "rg -r REPL world rep.txt (rg --replace, forwarded verbatim)",
         compacts: false,
-        known_bug: Some("rtk-strips-genuine-rg-replace-encoding-short-flags.md"),
+        known_bug: None,
     },
-    // BUG — rg --files (path list) replaced by 'N matches in 0 files' summary.
+    // FIXED — `--files` now recognized as a path-list format, passed through unmangled
+    // instead of being forced through the match-regroup path.
     Case {
         tool: "rg",
         args: &["--files", "src"],
         pattern: "",
         path: "src",
         mode: Mode::List,
-        desc: "rg --files src (path list; rtk emits bogus match summary)",
+        desc: "rg --files src (path list, passthrough)",
         compacts: false,
-        known_bug: Some("rtk-grep-count-and-pipe-output-replaced-by-rg-summary.md"),
+        known_bug: None,
     },
 ];
 

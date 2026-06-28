@@ -8,6 +8,21 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
 
+/// Which source tool the user invoked. Both `grep` and `rg` share this compaction core,
+/// but their regex dialects and flag namespaces differ and must NOT be conflated.
+///
+/// - grep: POSIX BRE/ERE, recurses only with `-r`; `\|` is alternation.
+/// - rg: RE2 regex, recurses by default; `-r`=`--replace`, `-E`=`--encoding`,
+///   `-h`=`--help`, and `\|` is a *literal* pipe.
+///
+/// Forwarding a grep-ism to rg (or vice-versa) silently corrupts the search, so the
+/// dialect decides whether we translate/strip (grep) or forward verbatim (rg).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Dialect {
+    Grep,
+    Rg,
+}
+
 /// Default cap on rendered match-line length (chars). Lines longer than this are
 /// context-truncated around the pattern. Previously a `-l` clap flag — dropped
 /// because `-l` collides with grep/rg's `--files-with-matches`.
@@ -55,11 +70,16 @@ const VALUE_FLAGS: &[&str] = &[
 /// the args untouched to ripgrep is what lets idiomatic invocations like
 /// `rg -li "foo" --type py` work — the old typed clap interface stole short flags
 /// (notably `-l`) from the grep/rg namespace and broke on flags-before-pattern.
-pub fn run(args: &[String], verbose: u8) -> Result<i32> {
+pub fn run(args: &[String], dialect: Dialect, verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
+    let tool = match dialect {
+        Dialect::Grep => "grep",
+        Dialect::Rg => "rg",
+    };
+
     if args.is_empty() {
-        eprintln!("rtk grep: no pattern given");
+        eprintln!("rtk {tool}: no pattern given");
         return Ok(2);
     }
 
@@ -67,29 +87,35 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
     let pattern_display = pattern.clone().unwrap_or_else(|| "?".to_string());
 
     if verbose > 0 {
-        eprintln!("grep: '{}' in {}", pattern_display, path);
+        eprintln!("{tool}: '{}' in {}", pattern_display, path);
     }
 
-    // Forward the user's args to rg, fixing two grep-isms that would corrupt output:
-    //  - strip grep-only flags whose letter rg reuses for a value-taking flag —
-    //    CRITICAL: grep `-r`/`-R` (recursive) is rg `--replace` and `-E` (ERE) is rg
-    //    `--encoding`, both value-taking, so forwarding e.g. `-rn`/`-nE` makes rg eat
-    //    the pattern (`def foo` -> `n foo`, or "unknown encoding: <pattern>"). rg
-    //    recurses and is ERE by default. Handles combined bundles (-rn, -nE, -rln).
-    //  - translate BRE alternation \| → | on the pattern token (grep BRE vs rg regex)
+    // Prepare the args for rg. The dialect decides the policy:
+    //  - Rg: forward EVERY token verbatim. The pattern is RE2 (a literal `\|` must stay
+    //    literal, not collapse to alternation) and `-r`/`-E`/`-h` are genuine rg flags
+    //    (`--replace`/`--encoding`/`--help`). Touching them corrupts the user's search.
+    //  - Grep: bridge two grep-isms that would corrupt output once fed to rg:
+    //      * strip grep-only flags whose letter rg reuses for a value-taking flag —
+    //        grep `-r`/`-R` (recursive) is rg `--replace`, `-E` (ERE) is rg `--encoding`,
+    //        so forwarding `-rn`/`-nE` makes rg eat the pattern. rg recurses and is ERE
+    //        by default. Handles combined bundles (`-rn`, `-nE`, `-rln`).
+    //      * translate BRE alternation `\|` → `|` on the pattern token.
     let mut user_args: Vec<String> = Vec::with_capacity(args.len());
     for (i, a) in args.iter().enumerate() {
-        if Some(i) == pattern_idx {
-            user_args.push(a.replace(r"\|", "|"));
-            continue;
-        }
-        if a.starts_with('-') && a.len() > 1 {
-            if let Some(sanitized) = strip_grep_only_flags(a) {
-                user_args.push(sanitized);
+        match dialect {
+            Dialect::Rg => user_args.push(a.clone()),
+            Dialect::Grep => {
+                if Some(i) == pattern_idx {
+                    user_args.push(a.replace(r"\|", "|"));
+                } else if a.starts_with('-') && a.len() > 1 {
+                    if let Some(sanitized) = strip_grep_only_flags(a) {
+                        user_args.push(sanitized);
+                    }
+                    // None → the flag was solely grep-only (e.g. `-r`, `-E`); drop it.
+                } else {
+                    user_args.push(a.clone());
+                }
             }
-            // None → the flag was solely grep-only (e.g. `-r`, `-E`); drop it entirely.
-        } else {
-            user_args.push(a.clone());
         }
     }
 
@@ -109,7 +135,9 @@ pub fn run(args: &[String], verbose: u8) -> Result<i32> {
         // uniq -c` must count by match, not by `file:match`. rg has its own
         // `--no-filename`, so honor the intent here. (Only in format mode — the regroup
         // path force-injects `-H` and needs the filename to parse.)
-        if wants_no_filename(args) {
+        // Only a grep concern: we strip grep's `-h` (rg's `-h` is --help) and re-add the
+        // intent here. In rg dialect `-h` was forwarded verbatim, so don't second-guess it.
+        if dialect == Dialect::Grep && wants_no_filename(args) {
             rg_cmd.arg("--no-filename");
         }
     } else {
@@ -402,6 +430,9 @@ fn token_has_format_flag(tok: &str) -> bool {
                 | "files-without-match"
                 | "only-matching"
                 | "null"
+                // rg-only: lists every file rg would search (no matching), so there is
+                // no `file:line:content` to regroup — pass it through unmangled.
+                | "files"
         );
     }
     if let Some(rest) = tok.strip_prefix('-') {
