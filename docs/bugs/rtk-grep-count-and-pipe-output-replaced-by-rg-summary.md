@@ -107,3 +107,24 @@ Same summary-substitution, but on `rg --files` (list every file rg would search)
 This widens the trigger beyond `grep -c` / `grep | head`: the summary-replacement also
 fires for `rg --files` with no pipe at all, so the heuristic deciding "this is a
 count/summary context" is mis-firing on plain path-listing output.
+
+---
+
+## Recurrence 2026-06-28 — `rg … | grep -v <pat>` (filter pipe) collapsed to count summary
+
+`rtk` (version 2.2.x per session) again replaced piped output with the rg count summary,
+losing every matching line:
+
+- **Command:** `rg -n '__version__' src tests | rg -v '^\S+:\d+:__version__ = '`
+  (intent: list `__version__` occurrences EXCLUDING the bare definition lines).
+- **Observed:** `1 matches in 1 files:` followed by nothing — the actual line was
+  dropped, so the filter result was unreadable. A second variant
+  `rg -n '__version__' src tests | grep -v '__version__ = '` produced the identical
+  `1 matches in 1 files:` with no content.
+- **Expected:** the surviving line(s) verbatim, e.g. `src/tuparles/__init__.py:3:__version__ = "0.3.0"`.
+- **Workaround:** `rtk proxy rg -n '__version__' src tests` (bypassing the filter via
+  `proxy`) returned the real single line immediately, confirming the def is the only
+  occurrence.
+- **Note:** confirms the trigger fires whenever an `rg`/`grep` invocation is the LEFT side
+  of a pipe whose right side is another `rg`/`grep` filter — the summarizer intercepts the
+  upstream match output instead of streaming the lines to the downstream filter.

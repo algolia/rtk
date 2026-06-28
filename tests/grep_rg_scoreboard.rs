@@ -201,30 +201,46 @@ fn exec(cmd: &mut Command) -> (String, String, i32) {
     )
 }
 
-/// Ask `bin rewrite "<tool> PROBE ."` what subcommand the tool routes to.
-/// Returns the subcommand ("grep"/"rg") or None for passthrough (no rtk filter).
-fn route(bin: &str, tool: &str) -> Option<String> {
+/// Ask `bin rewrite "<tool> PROBE_PATTERN ."` what the hook produces, returning the
+/// routed subcommand AND any flags it injects between the subcommand and the pattern.
+/// Capturing injected flags is what makes this harness fair to *any* routing strategy:
+///   - the one-subcommand-per-dialect model (`rg ...` → `rtk rg ...`, no injection), and
+///   - the flag-carries-dialect model (`rg ...` → `rtk grep -E ...`, injects `-E`).
+///
+/// A fixed sentinel pattern (`PROBE_PATTERN`) lets us slice the injected flags off cleanly
+/// without re-parsing the real (possibly space-bearing) user pattern. Returns None for
+/// passthrough (no rtk filter): exit 1 = passthrough, exit 2 = deny.
+fn route(bin: &str, tool: &str) -> Option<(String, Vec<String>)> {
     let raw = format!("{tool} PROBE_PATTERN .");
     let (stdout, _stderr, code) = exec(Command::new(bin).args(["rewrite", &raw]));
-    // exit 1 = passthrough, exit 2 = deny → treat as passthrough for the harness
     if code == 1 || code == 2 {
         return None;
     }
-    let head: Vec<&str> = stdout.split_whitespace().take(2).collect();
-    match head.as_slice() {
-        ["rtk", "rg"] => Some("rg".into()),
-        ["rtk", "grep"] => Some("grep".into()),
-        _ => None,
-    }
+    let toks: Vec<&str> = stdout.split_whitespace().collect();
+    // Expect: rtk <sub> [injected flags...] PROBE_PATTERN .
+    let sub = match toks.as_slice() {
+        ["rtk", sub, ..] if *sub == "rg" || *sub == "grep" => sub.to_string(),
+        _ => return None,
+    };
+    let injected: Vec<String> = toks
+        .iter()
+        .skip(2) // past "rtk <sub>"
+        .take_while(|t| **t != "PROBE_PATTERN")
+        .map(|s| (*s).to_string())
+        .collect();
+    Some((sub, injected))
 }
 
-/// Run the case through the rtk binary the way the hook would route it.
+/// Run the case through the rtk binary the way the hook would route it — including any
+/// dialect flag the rewrite injects (so #2138's `rtk grep -E` model is tested faithfully,
+/// not flattened back to a bare `rtk grep`). User args follow verbatim (exact argv).
 fn run_rtk(bin: &str, case: &Case) -> (String, String, i32) {
     let db = std::env::temp_dir().join("rtk-scoreboard.db");
     match route(bin, case.tool) {
-        Some(sub) => exec(
+        Some((sub, injected)) => exec(
             Command::new(bin)
-                .arg(sub)
+                .arg(&sub)
+                .args(&injected)
                 .args(case.args)
                 .current_dir(repo_root())
                 .env("RTK_DB_PATH", &db),

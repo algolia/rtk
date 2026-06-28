@@ -211,3 +211,24 @@ The `-rln`→`-ln` short-bundle strip on the **direct `rg` entrypoint** proposed
   params are `role` / `not_role` matching `attributes.role == "outdoor"` — file intact;
   RTK's `--replace=ln` (from the `-rln` bundle) ate the tokens.
 - **Workaround:** drop `-r` (`rg -ln 'pat' src/`) or use the Read tool.
+
+---
+
+## Recurrence 2026-06-28 — still un-applied on `0.42.0-algolia.4` (HA telemetry session)
+
+The direct-`rg` short-bundle strip (proposed 2026-06-25, re-confirmed-missing 2026-06-26)
+is **still un-applied** on `rtk 0.42.0-algolia.4`. Third version-pinned recurrence of the
+identical un-fixed entrypoint.
+
+- **Context:** searching `agent.py`/`ha.py` for the HA-push wiring (`chassis`, `/api/states`).
+- **Observed (mangled):** `chassis` → `clnis` (the matched `has`-class substring eaten by the
+  `--replace` value, leaving the surrounding `cl…is`), and the endpoint literal `/api/states`
+  collapsed to `ln` in `rg` output — exactly the `-rln`→`--replace=ln` mechanism.
+- **Confirmed real (not the file):** `Read` of the same lines showed intact `chassis` and
+  `"/api/states"`; the file was fine, RTK's output layer ate the tokens.
+- **Workaround:** routed all source/symbol lookups through the editor `Read` tool and
+  `python3` line-scans for the rest of the session; `rg -ln` (no `-r`) is unaffected.
+
+Nothing new on the root cause — this entry exists only to record that the fix proposed
+two entries up has not shipped across two patch observations, so field agents on
+`-algolia.4` should assume the direct-`rg` `-rln`/`-rl` path is still unsafe.
