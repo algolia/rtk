@@ -7,30 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_grep/rg dialect sprint. ripgrep is, by its author's FAQ, deliberately **not** a drop-in
-grep replacement (RE2 not POSIX BRE/ERE; `-r`=replace, `-E`=encoding; recurse-by-default).
-rtk rewrites both `grep` and `rg` onto one **dialect-blind** `rtk grep`, so it corrupts
-whichever tool the caller didn't type. The fix (in progress) is two native handlers; this
-entry lands the investigation + the scoreboard that drives it._
+## [0.42.0-algolia.5] (2026-06-29)
+
+_grep/rg dialect sprint, landed. ripgrep is, by its author's FAQ, deliberately **not** a
+drop-in grep replacement (RE2 not POSIX BRE/ERE; `-r`=replace, `-E`=encoding;
+recurse-by-default). rtk used to rewrite both `grep` and `rg` onto one **dialect-blind**
+`rtk grep`, corrupting whichever tool the caller didn't type. This release routes by
+**source-tool identity** — `grep` keeps BRE, `rg` runs verbatim — over a shared compaction
+core, and ships the differential oracle that proves it. The whole class (silent over-match,
+stripped rg flags, BRE parse errors) closes at once._
 
 ### Added
+- **Source-identity routing** (`cba316f`) — the hook's single `^(rg|grep)` rule splits into
+  `^grep`→`rtk grep` and `^rg`→`rtk rg`, with a new `Rg` command and a `Dialect` enum
+  threaded into the shared handler. The handler is no longer dialect-blind: it knows which
+  tool the caller typed and bridges the gap in the right direction. (#8)
+- **Native `rtk rg`** — ripgrep flags forwarded **verbatim**: value-taking `-r`/`--replace`
+  and `-E`/`--encoding` (both short and long) are preserved instead of stripped as grep
+  recursive/ERE; `\|` stays a literal pipe (RE2) instead of being rewritten to alternation;
+  `--files` is recognized as a path-list and passed through unmangled. (#9)
 - **Differential grep/rg scoreboard** (`tests/grep_rg_scoreboard.rs`) — a TDD oracle that
   treats the real tool as ground truth (no hand-written expectations, can't drift). Scores
   correctness (exact counts/lists, no fabricated/unmarked-dropped matches, no crash where
-  truth succeeds) and the ≥60% savings floor. Gate test + shareable report; ground-truth /
-  fork / optional upstream (`RTK_UPSTREAM_BIN`) columns; known-bug gating trips on a fix so
-  green is locked in. (#6, #7)
+  truth succeeds) and the ≥60% savings floor. Now **routing-strategy-agnostic**: it captures
+  any dialect flag the rewrite injects (e.g. an upstream `rtk grep -E`/`--engine` model), so
+  it fairly compares our handler against any implementation via `RTK_UPSTREAM_BIN`. (#6, #7, #8)
 
 ### Fixed
-- Confirmed two genuine-`rg` corruptions from the dialect-blind handler, measured against a
-  fresh build with `RTK_DISABLED=1` as the real-tool control: `rg 'foo\|bar'` over-matches
-  (literal pipe rewritten to alternation), and `rg -r/-E` short forms stripped as if grep.
-  Filed/annotated under `docs/bugs/`. Routing fix tracked. (#3)
+- **grep BRE → RE2 translation** (`6164ac6`) — a `grep` BRE pattern with a literal `(`/`{`
+  (e.g. `grep -c 'rpc('`) no longer reaches ripgrep as an unclosed group and errors; the
+  metachars `( ) { } | + ?` are toggled to their RE2 spelling in one pass. `-E`/`-F`/`-P`
+  opt out (already rg-compatible). Safe **because** routing guarantees the pattern is
+  genuinely BRE — it can never corrupt a real `rg` group. (#11)
+- The two genuine-`rg` corruptions confirmed in `algolia.4` (`rg 'foo\|bar'` over-match;
+  `rg -r/-E` short forms stripped) are resolved by the verbatim `rtk rg` path above. The
+  whole board is green (11/11 OK/COMPACTED, zero CORRUPT). (#9)
+
+### Changed
+- `scripts/fork-hygiene.sh` excludes `docs/bugs/` and `tasks/` from the leak scan — internal
+  root-cause analysis legitimately cites "identical upstream `rtk-ai/rtk`" and the word
+  "telemetry"; the gate targets user-facing install docs. Same rationale as `docs/upstream/`.
 
 ### Doctrine
 - ripgrep is an **alternative, not a replacement** — rtk handling both `grep` and `rg`
-  natively and excellently is the contribution, not papering over ripgrep's chosen
-  divergences. Two native handlers over a shared compaction core. (#4)
+  natively is the contribution, not papering over ripgrep's chosen divergences. (#4)
+- **Forward note:** upstream `v0.43.0` (PR #2641) reached the same goal by a simpler route —
+  *run the invoked engine* (grep→grep, rg→rg) instead of translating dialects. The next
+  upstream catchup will adopt that and retire this release's translation layer; the
+  scoreboard stays as the regression guard (it already caught that v0.43.0 still errors on
+  short `rg -r`/`-E`, reported upstream on issue #2253). (#10, #12)
 
 ## [0.42.0-algolia.4] (2026-06-25)
 
