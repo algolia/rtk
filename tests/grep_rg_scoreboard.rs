@@ -110,16 +110,38 @@ const CASES: &[Case] = &[
         compacts: false,
         known_bug: None,
     },
-    // BUG (grep BRE) — literal paren under grep BRE; rtk feeds it to rg ERE → crash.
+    // FIXED — grep BRE literal paren now translated to RE2 `rpc\(` instead of crashing.
     Case {
         tool: "grep",
         args: &["-c", "rpc(", "tests/fixtures/scoreboard/paren.txt"],
         pattern: "rpc(",
         path: "tests/fixtures/scoreboard/paren.txt",
         mode: Mode::Count,
-        desc: "grep -c 'rpc(' (grep BRE: literal paren; truth=2, rtk errors)",
+        desc: "grep -c 'rpc(' (grep BRE literal paren; truth=2)",
         compacts: false,
-        known_bug: Some("rtk-proxies-grep-as-rg-breaks-bre-regex.md"),
+        known_bug: None,
+    },
+    // grep BRE alternation `\|` is the operator → must match both branches (truth=3 lines).
+    Case {
+        tool: "grep",
+        args: &["-c", r"foo\|bar", "tests/fixtures/scoreboard/disc.txt"],
+        pattern: r"foo\|bar",
+        path: "tests/fixtures/scoreboard/disc.txt",
+        mode: Mode::Count,
+        desc: r"grep -c 'foo\|bar' (BRE alternation; truth=3)",
+        compacts: false,
+        known_bug: None,
+    },
+    // grep -F fixed-strings: paren is literal, no BRE translation, rg -F forwarded.
+    Case {
+        tool: "grep",
+        args: &["-Fc", "rpc(", "tests/fixtures/scoreboard/paren.txt"],
+        pattern: "rpc(",
+        path: "tests/fixtures/scoreboard/paren.txt",
+        mode: Mode::Count,
+        desc: "grep -Fc 'rpc(' (fixed strings; truth=2, no translation)",
+        compacts: false,
+        known_bug: None,
     },
     // FIXED (bug alpha, default mode) — `\|` no longer over-matches; truth=1 line, rtk=1.
     Case {

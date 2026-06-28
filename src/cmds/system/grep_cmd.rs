@@ -99,14 +99,20 @@ pub fn run(args: &[String], dialect: Dialect, verbose: u8) -> Result<i32> {
     //        grep `-r`/`-R` (recursive) is rg `--replace`, `-E` (ERE) is rg `--encoding`,
     //        so forwarding `-rn`/`-nE` makes rg eat the pattern. rg recurses and is ERE
     //        by default. Handles combined bundles (`-rn`, `-nE`, `-rln`).
-    //      * translate BRE alternation `\|` → `|` on the pattern token.
+    //      * translate the BRE pattern to RE2 (`bre_to_ere`): `\|`→`|`, literal `(`→`\(`,
+    //        etc. — skipped under `-E`/`-F`/`-P`, where the pattern is already compatible.
+    let bre_translate = dialect == Dialect::Grep && !grep_uses_nonbre_dialect(args);
     let mut user_args: Vec<String> = Vec::with_capacity(args.len());
     for (i, a) in args.iter().enumerate() {
         match dialect {
             Dialect::Rg => user_args.push(a.clone()),
             Dialect::Grep => {
                 if Some(i) == pattern_idx {
-                    user_args.push(a.replace(r"\|", "|"));
+                    user_args.push(if bre_translate {
+                        bre_to_ere(a)
+                    } else {
+                        a.clone()
+                    });
                 } else if a.starts_with('-') && a.len() > 1 {
                     if let Some(sanitized) = strip_grep_only_flags(a) {
                         user_args.push(sanitized);
@@ -332,6 +338,88 @@ fn stdout_is_regular_file() -> bool {
     {
         false
     }
+}
+
+/// Translate a POSIX BRE pattern (grep's default dialect) into the RE2 syntax ripgrep
+/// speaks. In BRE the group/interval/alternation/repetition metacharacters
+/// `( ) { } | + ?` are *literal* unless backslash-escaped, and escaped means special —
+/// the exact inverse of RE2. So the translation is a backslash *toggle* on precisely
+/// that set: `(` → `\(` (literal) and `\(` → `(` (group), etc. Everything else is left
+/// untouched: `.` `*` `^` `$` mean the same in both, and other escapes (`\.`, `\d`,
+/// `\\`) pass through verbatim. Characters inside a bracket expression `[...]` are
+/// literal in both dialects, so they are copied as-is (first `]` closes — the standard
+/// simplification; a leading `]` in `[]...]` is the only case it under-handles).
+///
+/// Only invoked for the grep dialect in default BRE mode — `-E`/`-F`/`-P` opt out (see
+/// `grep_uses_nonbre_dialect`), and the rg dialect never translates at all.
+fn bre_to_ere(pattern: &str) -> String {
+    const TOGGLE: &[char] = &['(', ')', '{', '}', '|', '+', '?'];
+    let mut out = String::with_capacity(pattern.len() + 4);
+    let mut chars = pattern.chars().peekable();
+    let mut in_bracket = false;
+    while let Some(c) = chars.next() {
+        if in_bracket {
+            out.push(c);
+            if c == ']' {
+                in_bracket = false;
+            }
+            continue;
+        }
+        match c {
+            '[' => {
+                in_bracket = true;
+                out.push(c);
+            }
+            '\\' => match chars.peek() {
+                // BRE special form (e.g. `\(` = group) → RE2 special: drop the backslash.
+                Some(&next) if TOGGLE.contains(&next) => {
+                    out.push(next);
+                    chars.next();
+                }
+                // Other escape (`\.`, `\d`, `\\`, ...) → keep verbatim.
+                Some(&next) => {
+                    out.push('\\');
+                    out.push(next);
+                    chars.next();
+                }
+                None => out.push('\\'),
+            },
+            // BRE literal metachar → RE2: escape it so it stays literal.
+            _ if TOGGLE.contains(&c) => {
+                out.push('\\');
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Did the caller select a non-BRE grep dialect (`-E` ERE, `-F` fixed, `-P` PCRE)? In
+/// those modes the pattern is already compatible with rg's engine (groups are groups) or
+/// is a literal string (`-F`), so the BRE→RE2 backslash-toggle must NOT run — it would
+/// re-break `-E 'a(b)'` by escaping the group. Respects value-flag bundles (`-e`'s value
+/// is data, not a mode letter).
+fn grep_uses_nonbre_dialect(args: &[String]) -> bool {
+    args.iter().any(|tok| {
+        if let Some(long) = tok.strip_prefix("--") {
+            return matches!(long, "extended-regexp" | "fixed-strings" | "perl-regexp");
+        }
+        if let Some(rest) = tok.strip_prefix('-') {
+            if tok.starts_with("--") {
+                return false;
+            }
+            for c in rest.chars() {
+                if matches!(c, 'E' | 'F' | 'P') {
+                    return true;
+                }
+                if SHORT_VALUE_CHARS.contains(&c) {
+                    break; // remainder is this flag's value, not more flags
+                }
+            }
+        }
+        false
+    })
 }
 
 /// Remove grep flags that must NOT reach ripgrep verbatim because rg either does them
@@ -582,6 +670,54 @@ mod tests {
         let cleaned = clean_line(line, 50, None, "result");
         assert!(!cleaned.starts_with(' '));
         assert!(cleaned.len() <= 50);
+    }
+
+    // --- BRE → RE2 pattern translation (grep dialect) ---
+    #[test]
+    fn test_bre_to_ere_literal_metachars_get_escaped() {
+        // BRE: ( ) { } | + ? are literal → RE2 must escape them to stay literal.
+        assert_eq!(bre_to_ere("rpc("), r"rpc\(");
+        assert_eq!(bre_to_ere("f(x)"), r"f\(x\)");
+        assert_eq!(bre_to_ere("a{2}"), r"a\{2\}");
+        assert_eq!(bre_to_ere("a+b?"), r"a\+b\?");
+        assert_eq!(bre_to_ere("a|b"), r"a\|b"); // literal pipe in BRE
+    }
+
+    #[test]
+    fn test_bre_to_ere_escaped_metachars_become_special() {
+        // BRE GNU extensions: \( \) \{ \} \| \+ \? are the *operators* → RE2 drops the
+        // backslash so they act as group/interval/alternation/repetition.
+        assert_eq!(bre_to_ere(r"\(ab\)"), "(ab)");
+        assert_eq!(bre_to_ere(r"a\{2\}"), "a{2}");
+        assert_eq!(bre_to_ere(r"foo\|bar"), "foo|bar"); // alternation
+        assert_eq!(bre_to_ere(r"a\+"), "a+");
+    }
+
+    #[test]
+    fn test_bre_to_ere_leaves_shared_syntax_untouched() {
+        assert_eq!(bre_to_ere("a.*b"), "a.*b"); // . and * are the same in both
+        assert_eq!(bre_to_ere(r"\.rs$"), r"\.rs$"); // escaped dot stays escaped
+        assert_eq!(bre_to_ere("^foo"), "^foo");
+        assert_eq!(bre_to_ere(r"\d+"), r"\d\+"); // \d kept; bare + escaped (BRE literal)
+    }
+
+    #[test]
+    fn test_bre_to_ere_skips_bracket_contents() {
+        // Inside [...] the metachars are literal in both dialects — don't toggle them.
+        assert_eq!(bre_to_ere("[(){}]"), "[(){}]");
+        assert_eq!(bre_to_ere("[a-z]+"), r"[a-z]\+");
+    }
+
+    #[test]
+    fn test_grep_uses_nonbre_dialect() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert!(grep_uses_nonbre_dialect(&s(&["-E", "a(b)"])));
+        assert!(grep_uses_nonbre_dialect(&s(&["-F", "rpc("])));
+        assert!(grep_uses_nonbre_dialect(&s(&["-iP", "x"])));
+        assert!(grep_uses_nonbre_dialect(&s(&["--fixed-strings", "x"])));
+        assert!(!grep_uses_nonbre_dialect(&s(&["-rn", "rpc("])));
+        // `-e`'s value is data: an 'F' inside it must not be read as a mode flag.
+        assert!(!grep_uses_nonbre_dialect(&s(&["-e", "Foo"])));
     }
 
     // --- grep line parsing (regression for single-file colon-content mis-parse) ---
