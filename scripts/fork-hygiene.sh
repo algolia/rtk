@@ -31,8 +31,11 @@ FIX=0
 # !.git keeps the object store out.
 # docs/upstream/ holds drafts of contributions back TO upstream (PR base/head refs,
 # issue links) — naming rtk-ai/rtk there is correct, not a leak; it is internal, not
-# user-facing fork identity.
-GATE_EXCLUDES=(--hidden --glob '!.git' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md' --glob '!docs/upstream/**')
+# user-facing fork identity. Same rationale for docs/bugs/ (root-cause analysis routinely
+# cites "identical upstream rtk-ai/rtk" and the word "telemetry" when describing a bug's
+# context) and tasks/ (internal task history). All three are internal, not user-facing
+# install docs — the gate's actual target.
+GATE_EXCLUDES=(--hidden --glob '!.git' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE' --glob '!CHANGELOG.md' --glob '!hooks/pi/README.md' --glob '!docs/upstream/**' --glob '!docs/bugs/**' --glob '!tasks/**')
 # Shared excludes for --fix replacements (never rewrite the rules doc, the script, or legal text)
 FIX_EXCLUDES=(--hidden --glob '!.git' --glob '!Cargo.lock' --glob '!CLAUDE.md' --glob '!scripts/fork-hygiene.sh' --glob '!CONTRIBUTING.md' --glob '!LICENSE')
 
