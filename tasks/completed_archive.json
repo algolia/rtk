@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1",
+    "subject": "Build fresh release binary & confirm version",
+    "completedAt": "2026-06-28",
+    "learnings": "Change-mgmt rule in practice: the installed rtk lagged; only target/release from the branch tells the truth."
+  },
+  {
+    "id": "2",
+    "subject": "Re-verify documented grep/rg bug matrix on fresh build",
+    "completedAt": "2026-06-28",
+    "learnings": "Fresh build matched the report annotations: grep BRE still breaks; -c count + redirect already resolved."
+  },
+  {
+    "id": "3",
+    "subject": "Proactively probe genuine rg-only usage for silent corruption",
+    "completedAt": "2026-06-28",
+    "learnings": "GOTCHA: my own Bash rg/grep calls are rewritten by the live Claude hook, so 'real rg' probes were actually rtk grep — must use RTK_DISABLED=1 for ground truth. Found alpha (rg '\\|' over-match, silent) and beta (rg -r/-E stripped)."
+  },
+  {
+    "id": "4",
+    "subject": "Design source-tool-identity routing fix",
+    "completedAt": "2026-06-28",
+    "learnings": "ripgrep is deliberately NOT grep-compatible (BurntSushi FAQ) — so it's an alternative, not a replacement. Design: two native handlers (grep BRE-compat + rg verbatim/mode-aware) over a shared compaction core; rg is first-class, not a fallback."
+  },
+  {
+    "id": "5",
+    "subject": "Check upstream rtk-ai/rtk for grep/rg dialect handling",
+    "completedAt": "2026-06-28",
+    "learnings": "Upstream has the IDENTICAL dialect-blind rule (rules.rs:92-94) and NO differential test harness — both the fix and the scoreboard are genuine backport candidates."
+  },
+  {
+    "id": "6",
+    "subject": "Build differential scoreboard harness",
+    "completedAt": "2026-06-28",
+    "learnings": "Real tool as oracle = no hand-written expectations, can't drift. Routes via `rtk rewrite` so the board auto-tracks the grep/rg split as it lands."
+  },
+  {
+    "id": "7",
+    "subject": "Add gate test + shareable report table + upstream column",
+    "completedAt": "2026-06-28",
+    "learnings": "Known-bug gating keeps cargo test green while the board stays honest: tagged cases asserted broken, so a fix trips the gate ('appears FIXED, lock it in'). Upstream-build automation (scripts/scoreboard.sh) deferred into the backport task #10."
+  }
+]

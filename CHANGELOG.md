@@ -5,6 +5,33 @@ All notable changes to rtk (Rust Token Killer) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+_grep/rg dialect sprint. ripgrep is, by its author's FAQ, deliberately **not** a drop-in
+grep replacement (RE2 not POSIX BRE/ERE; `-r`=replace, `-E`=encoding; recurse-by-default).
+rtk rewrites both `grep` and `rg` onto one **dialect-blind** `rtk grep`, so it corrupts
+whichever tool the caller didn't type. The fix (in progress) is two native handlers; this
+entry lands the investigation + the scoreboard that drives it._
+
+### Added
+- **Differential grep/rg scoreboard** (`tests/grep_rg_scoreboard.rs`) — a TDD oracle that
+  treats the real tool as ground truth (no hand-written expectations, can't drift). Scores
+  correctness (exact counts/lists, no fabricated/unmarked-dropped matches, no crash where
+  truth succeeds) and the ≥60% savings floor. Gate test + shareable report; ground-truth /
+  fork / optional upstream (`RTK_UPSTREAM_BIN`) columns; known-bug gating trips on a fix so
+  green is locked in. (#6, #7)
+
+### Fixed
+- Confirmed two genuine-`rg` corruptions from the dialect-blind handler, measured against a
+  fresh build with `RTK_DISABLED=1` as the real-tool control: `rg 'foo\|bar'` over-matches
+  (literal pipe rewritten to alternation), and `rg -r/-E` short forms stripped as if grep.
+  Filed/annotated under `docs/bugs/`. Routing fix tracked. (#3)
+
+### Doctrine
+- ripgrep is an **alternative, not a replacement** — rtk handling both `grep` and `rg`
+  natively and excellently is the contribution, not papering over ripgrep's chosen
+  divergences. Two native handlers over a shared compaction core. (#4)
+
 ## [0.42.0-algolia.4] (2026-06-25)
 
 _Reliability sweep of the command-proxy layer: **9 reports** (5 High, 4 Medium) across two
