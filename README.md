@@ -155,6 +155,10 @@ byte-faithful, and compaction is reserved for interactive/agent views where it c
 captured data. The most recent sweep (`v0.42.0-algolia.4`) closed 9 such reports; see the
 [release notes](https://github.com/algolia/rtk/releases/tag/v0.42.0-algolia.4) for the taxonomy.
 
+Hit a mis-rewrite yourself? External users report via [GitHub issues](https://github.com/algolia/rtk/issues/new/choose)
+using the mangling-report template (installed agents file these automatically); [`docs/bugs/`](docs/bugs/)
+remains the fork's internal ledger.
+
 ## Commands
 
 ### Files
