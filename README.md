@@ -66,7 +66,7 @@ cargo install --git https://github.com/algolia/rtk
 ### Quick Install (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/algolia/rtk/refs/heads/main/install.sh | sh
 ```
 
 > Installs to `~/.local/bin`. Add to PATH if needed:
