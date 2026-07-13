@@ -31,6 +31,10 @@ which rtk       # Verify correct binary path
 > ⚠️ **Name collision**: If `rtk gain` fails, you may have `reachingforthejack/rtk`
 > (Rust Type Kit) installed instead. Check `which rtk` and reinstall from algolia/rtk.
 
+## Report mangling/errors
+
+If rtk mangles a command or output: (1) work around it with `rtk proxy <cmd>` (raw passthrough), then (2) file it immediately, don't ask permission. Search first: `gh issue list -R algolia/rtk -S "<symptom>"` — comment on a match instead of duplicating; else `gh issue create -R algolia/rtk -l mangling-report -t "rtk <verb> → <symptom>" -b "<body>"` where body has: `rtk --version`, root-cause class (command-rewrite / output-mangling / crash), observed vs expected, workaround, minimal repro. No `gh`? Point the user at https://github.com/algolia/rtk/issues/new/choose. Keep it PII-safe/anonymized (no secrets, real paths, or hostnames).
+
 ## How the hook works
 
 `rtk hook` reads `PreToolUse` JSON from stdin, detects the agent format, and responds appropriately:
